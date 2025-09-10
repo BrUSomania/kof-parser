@@ -1,0 +1,38 @@
+# Node modules
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor files
+.vscode/
+*.code-workspace
+
+# Test output
+coverage/
+
+# Environment files
+.env
+.env.*
+
+# Misc
+*.tgz
+*.swp
+
+# Ignore demo output
+/demo/*.out
+/demo/*.log
+
+# Ignore package lock files (optional, if you use yarn or pnpm)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

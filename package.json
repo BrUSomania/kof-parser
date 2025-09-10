@@ -1,0 +1,35 @@
+{
+  "name": "kof-parser",
+  "version": "0.1.0",
+  "description": "Parser for Norwegian KOF files. Works as ES module and via script injection. Supports JavaScript and TypeScript.",
+  "main": "dist/kof-parser.cjs.js",
+  "module": "dist/kof-parser.esm.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/kof-parser.esm.js",
+      "require": "./dist/kof-parser.cjs.js",
+      "types": "./types/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "types"
+  ],
+  "scripts": {
+    "build": "tsc && rollup -c",
+    "test": "node test/index.js",
+    "demo": "node demo/demo.js"
+  },
+  "keywords": ["kof", "parser", "norwegian", "file format"],
+  "author": "BrUSomania",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BrUSomania/kof-parser.git"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "rollup": "^4.0.0"
+  }
+}
