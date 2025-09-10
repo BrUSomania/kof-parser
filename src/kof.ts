@@ -1,3 +1,5 @@
+import { WkbGeomPoint, WkbGeomLinestring, WkbGeomPolygon } from './geometry';
+
 // kof.ts - Main KOF parser implementation
 
 // Generic FileReader class
@@ -41,6 +43,111 @@ export class KOF extends FileReader {
     super(fileName, fileContent, 'text/kof');
   }
 
+  /**
+   * Convert parsed KOF data into Wkb geometry objects (points, lines, polygons)
+   */
+  toWkbGeometries() {
+    if (!this.parsedData) this.parse();
+    const geoms: (WkbGeomPoint | WkbGeomLinestring | WkbGeomPolygon)[] = [];
+    let usedRows = new Set();
+    let groupRows: any[] = [];
+    let currentType: null | 'line' | 'polygon' = null;
+    const flushGroup = () => {
+      if (currentType === 'line' && groupRows.length > 1) {
+        const line = new WkbGeomLinestring(groupRows.map(r => this._robustPoint(r)));
+        geoms.push(line);
+        groupRows.forEach(r => usedRows.add(r.row));
+      } else if (currentType === 'polygon' && groupRows.length > 2) {
+        const poly = new WkbGeomPolygon([new WkbGeomLinestring(groupRows.map(r => this._robustPoint(r)))]);
+        geoms.push(poly);
+        groupRows.forEach(r => usedRows.add(r.row));
+      }
+      groupRows = [];
+      // Do not reset currentType here; let state machine handle it
+    };
+    // State machine for KOF geometry grouping
+    let state = 'none'; // 'none' | 'line' | 'polygon'
+    for (const rowObj of this.parsedData || []) {
+      const fields = rowObj.fields;
+      let code = fields[0];
+      if (code === '09' && fields[1]) code = `09_${fields[1]}`;
+      if (code === '09_91') {
+        // Start of line or polygon block
+        flushGroup();
+        state = 'line';
+        currentType = 'line';
+        groupRows = [];
+      } else if (code === '09_96') {
+        if (state === 'line') {
+          // This 09_96 is actually a start of polygon block (after 09_91)
+          flushGroup();
+          state = 'polygon';
+          currentType = 'polygon';
+          groupRows = [];
+        } else if (state === 'polygon') {
+          // This 09_96 is end of polygon
+          flushGroup();
+          state = 'none';
+          currentType = null;
+        } else {
+          // 09_96 outside any block, treat as end
+          flushGroup();
+          state = 'none';
+          currentType = null;
+        }
+      } else if (code === '09_99') {
+        if (state === 'line') {
+          // End of line
+          flushGroup();
+          state = 'none';
+          currentType = null;
+        } else {
+          // 09_99 outside line, treat as end
+          flushGroup();
+          state = 'none';
+          currentType = null;
+        }
+      } else if (code === '05') {
+        if (state === 'line' || state === 'polygon') {
+          groupRows.push(rowObj);
+        }
+      }
+    }
+    flushGroup();
+    // Add standalone points
+    for (const rowObj of this.parsedData || []) {
+      if (rowObj.fields[0] === '05' && !usedRows.has(rowObj.row)) {
+        geoms.push(this._robustPoint(rowObj));
+      }
+    }
+    return geoms;
+  }
+
+  // Robustly extract a point from a row, handling missing optional fields and field order
+  _robustPoint(rowObj: any) {
+    const fields = rowObj.fields;
+    let name = '';
+    let code = '';
+    let x = NaN, y = NaN, z = -500;
+    // Find the first two fields that look like numbers (x/y), rest are name/code
+    let coords: number[] = [];
+    for (let i = 1; i < fields.length; i++) {
+      const f = fields[i];
+      if (/^-?\d+(\.\d+)?$/.test(f)) {
+        coords.push(parseFloat(f));
+      } else if (!name) {
+        name = f;
+      } else if (!code) {
+        code = f;
+      }
+    }
+    if (coords.length >= 2) {
+      x = coords[0];
+      y = coords[1];
+      if (coords.length > 2) z = coords[2];
+    }
+    return new WkbGeomPoint(x, y, z, { name, code, row: rowObj.row });
+  }
 
   /**
    * Parse the KOF file, handling:

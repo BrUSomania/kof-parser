@@ -11,7 +11,7 @@ A JavaScript/TypeScript parser for Norwegian KOF files. Usable as an ES module o
 ## Example KOF Files
 Example KOF files for testing parsing functionality are located in:
 
-  demo/kof-files
+  demo/kof_files
 
 ## KOF File Format (Column Description)
 The positioning of the data content in a KOF file is given by the following header description string (which tells us in which column ranges the data is located):

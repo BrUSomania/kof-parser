@@ -47,7 +47,7 @@
 	 -->
 
 
-	- Example KOF files for testing are in `demo/kof-files`.
+	- Example KOF files for testing are in `demo/kof_files`.
 	- The data columns in a KOF file are defined by a header string:
 	  `-05 PPPPPPPPPP KKKKKKKK XXXXXXXX.XXX YYYYYYY.YYY ZZZZ.ZZZ`
 	  - `05`: row code (required)
@@ -61,7 +61,7 @@
 	- See README.md for more details and examples.
 
 - [ ] KOF Row Handling and Testing Context
-	- Tests should read all KOF files in `demo/kof-files`.
+	- Tests should read all KOF files in `demo/kof_files`.
 	- Some demo KOF files are intentionally malformed:
 	  - Try to repair rows if possible. If a row is repaired, add it with a warning (include row/object id).
 	  - Rows that cannot be repaired should be ignored and a warning/error added.

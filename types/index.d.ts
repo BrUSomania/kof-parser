@@ -1,2 +1,3 @@
 import type { FileReader, KOF } from '../src/kof';
-export { FileReader, KOF };
+import type { WkbGeomPoint, WkbGeomLinestring, WkbGeomPolygon } from '../src/geometry';
+export { FileReader, KOF, WkbGeomPoint, WkbGeomLinestring, WkbGeomPolygon };
