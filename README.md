@@ -1,13 +1,3 @@
-## Copilot Instructions: KOF File Structure Basics
-When working with KOF files, follow these rules:
-
-- Points are represented by a single row with code `05`.
-- Lines start with a row code `91` (e.g. `09_91`), followed by one or more `05` rows for vertices, and end with a row code `99` (e.g. `09_99`).
-- Polygons start with a row code `91` (e.g. `09_91`), followed by one or more `05` rows for vertices, and are closed with a row code `96` (e.g. `09_96`).
-- The column layout is described by a header string like `-05 PPPPPPPPPP KKKKKKKK XXXXXXXX.XXX YYYYYYY.YYY ZZZZ.ZZZ`.
-- The parser should allow for optional point names, codes, and elevation, and accept additional columns after elevation.
-- Northing/latitude and easting/longitude are required for observations, but not for start/close codes.
-- Elevation is optional and should default to -500 if not present.
 # kof-parser
 
 A JavaScript/TypeScript parser for Norwegian KOF files. Usable as an ES module or via script injection. Includes demo scripts and sample KOF files.

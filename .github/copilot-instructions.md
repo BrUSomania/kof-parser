@@ -47,7 +47,6 @@
 	 -->
 
 
-- [ ] KOF File Structure Basics
 	- Example KOF files for testing are in `demo/kof-files`.
 	- The data columns in a KOF file are defined by a header string:
 	  `-05 PPPPPPPPPP KKKKKKKK XXXXXXXX.XXX YYYYYYY.YYY ZZZZ.ZZZ`
@@ -60,6 +59,15 @@
 	  - Other columns after elevation are allowed and should be parsed if present.
 	- Points are single `05` rows. Lines and polygons start with `91` (e.g. `09_91`), have one or more `05` rows, and end with `99` (lines) or `96` (polygons).
 	- See README.md for more details and examples.
+
+- [ ] KOF Row Handling and Testing Context
+	- Tests should read all KOF files in `demo/kof-files`.
+	- Some demo KOF files are intentionally malformed:
+	  - Try to repair rows if possible. If a row is repaired, add it with a warning (include row/object id).
+	  - Rows that cannot be repaired should be ignored and a warning/error added.
+	  - Rows starting with `-` are ignored. Add warnings for these rows. Consecutive `-` rows can be grouped in a single warning (e.g. "KOF lines X to Y ignored").
+	  - Empty rows are ignored (including trailing newlines).
+	- Parsing should continue through the file regardless of errors.
 
 <!--
 ## Execution Guidelines

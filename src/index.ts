@@ -1,3 +1,1 @@
-import { kof } from './kof';
-export { kof };
-export default kof;
+export { FileReader, KOF } from './kof';

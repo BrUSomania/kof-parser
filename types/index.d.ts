@@ -1,4 +1,2 @@
-import type { kof } from '../src/kof';
-declare const _default: typeof kof;
-export { kof };
-export default _default;
+import type { FileReader, KOF } from '../src/kof';
+export { FileReader, KOF };
