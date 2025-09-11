@@ -34,6 +34,6 @@ coverage/
 /demo/*.log
 
 # Ignore package lock files (optional, if you use yarn or pnpm)
-package-lock.json
+# package-lock.json  <-- keep lockfile for reproducible installs and CI caching
 yarn.lock
 pnpm-lock.yaml
