@@ -26,9 +26,37 @@ kofFiles.forEach(file => {
 	if (kof.warnings.length) {
 		console.log('  Warnings:', kof.warnings);
 	}
+	if (kof.diagnostics && kof.diagnostics.length) {
+		console.log('  Diagnostics (parse strategies):', kof.diagnostics.slice(0,5));
+	}
 	console.log('  Parsed sample:', kof.parsedData ? kof.parsedData.slice(0, 2) : null);
 	console.log('  GeoJSON:', kof.toGeoJSON());
-	console.log('  Geometries:', Array.isArray(geometries) ? geometries.slice(0, 2) : geometries);
+	// Print geometry details
+	if (Array.isArray(geometries)) {
+		console.log('  Geometries:');
+		geometries.forEach((g, i) => {
+			if (g && g.constructor && g.constructor.name === 'WkbGeomLinestring') {
+				console.log(`    [${i + 1}] Linestring with ${g.points.length} points:`);
+				g.points.forEach((pt, j) => {
+					console.log(`      (${pt.x}, ${pt.y}${pt.z !== undefined ? ', ' + pt.z : ''})`, pt.meta);
+				});
+			} else if (g && g.constructor && g.constructor.name === 'WkbGeomPolygon') {
+				console.log(`    [${i + 1}] Polygon with ${g.rings.length} rings:`);
+				g.rings.forEach((ring, rIdx) => {
+					console.log(`      Ring ${rIdx + 1} with ${ring.points.length} points:`);
+					ring.points.forEach((pt, j) => {
+						console.log(`        (${pt.x}, ${pt.y}${pt.z !== undefined ? ', ' + pt.z : ''})`, pt.meta);
+					});
+				});
+			} else if (g && g.constructor && g.constructor.name === 'WkbGeomPoint') {
+				console.log(`    [${i + 1}] Point: (${g.x}, ${g.y}${g.z !== undefined ? ', ' + g.z : ''})`, g.meta);
+			} else {
+				console.log(`    [${i + 1}]`, g);
+			}
+		});
+	} else {
+		console.log('  Geometries:', geometries);
+	}
 
 	// Write full log file per test
 	const logDir = path.join(__dirname, 'logs');
@@ -46,15 +74,32 @@ kofFiles.forEach(file => {
 		logText += `\n## Warnings\n`;
 		logText += kof.warnings.map(w => '- ' + w).join('\n') + '\n';
 	}
-	logText += `\n## Parsed Data (first 5 rows)\n`;
+	logText += `\n## Parsed Data\n`;
 	logText += JSON.stringify((kof.parsedData || []).slice(0, 5), null, 2) + '\n';
 	logText += `\n## GeoJSON (summary)\n`;
 	logText += JSON.stringify(kof.toGeoJSON(), null, 2) + '\n';
-	logText += `\n## Geometries (first 5)\n`;
+	logText += `\n## Geometries\n`;
 	if (Array.isArray(geometries)) {
-		geometries.slice(0, 5).forEach((g, i) => {
+		geometries.forEach((g, i) => {
 			logText += `- Geometry ${i + 1}:\n`;
-			logText += JSON.stringify(g, null, 2) + '\n';
+			if (g && g.constructor && g.constructor.name === 'WkbGeomLinestring') {
+				logText += `  Linestring with ${g.points.length} points:\n`;
+				g.points.forEach((pt, j) => {
+					logText += `    (${pt.x}, ${pt.y}${pt.z !== undefined ? ', ' + pt.z : ''}) ${JSON.stringify(pt.meta)}\n`;
+				});
+			} else if (g && g.constructor && g.constructor.name === 'WkbGeomPolygon') {
+				logText += `  Polygon with ${g.rings.length} rings:\n`;
+				g.rings.forEach((ring, rIdx) => {
+					logText += `    Ring ${rIdx + 1} with ${ring.points.length} points:\n`;
+					ring.points.forEach((pt, j) => {
+						logText += `      (${pt.x}, ${pt.y}${pt.z !== undefined ? ', ' + pt.z : ''}) ${JSON.stringify(pt.meta)}\n`;
+					});
+				});
+			} else if (g && g.constructor && g.constructor.name === 'WkbGeomPoint') {
+				logText += `  Point: (${g.x}, ${g.y}${g.z !== undefined ? ', ' + g.z : ''}) ${JSON.stringify(g.meta)}\n`;
+			} else {
+				logText += JSON.stringify(g, null, 2) + '\n';
+			}
 		});
 	} else {
 		logText += JSON.stringify(geometries, null, 2) + '\n';

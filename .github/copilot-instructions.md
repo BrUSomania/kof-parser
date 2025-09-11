@@ -120,3 +120,22 @@ Before starting a new task in the above plan, update progress in the plan.
 - Work through each checklist item systematically.
 - Keep communication concise and focused.
 - Follow development best practices.
+
+## Summary of findings (added by assistant)
+
+- The parser now extracts points, lines and polygons from demo KOF files and attaches name/code as metadata.
+- Coordinates are parsed and stored into geometry objects as (easting, northing, elevation).
+- Parsing uses a columns-first approach (README widths) and robust token-based fallbacks. Each parsed row includes a `strategy` diagnostic indicating which heuristic succeeded (e.g., `columns`, `tokens-end-3`, `decimal-scan`, `large-first`).
+- Grouping of 05 rows into 09-start/99-end (linestring) and 09-start/96-end (polygon) is implemented and tested on demo files.
+- Many malformed or irregular rows exist in the demo data; heuristics reduce mis-parses but a few rows still mix name/code with numeric tokens. Diagnostics help triage these cases.
+
+## Recommendations / Next steps
+
+- Detect and honor a file-level KOF header (the `-05 PPPPPPPPPP ...` header) when present and prefer strict columns-only parsing for that file to eliminate ambiguity.
+- Add unit tests for `parseKOFRow` covering: well-formed column rows, whitespace-separated rows, rows with missing elevation, and intentionally malformed rows. This will prevent regressions.
+- Improve warnings to include the offending raw line and parsed tokens for easier debugging of malformed rows.
+- Consider supporting per-file parsing mode metadata (e.g., `mode: 'columns' | 'tokens'`) and allow the user to override it for edge-case files.
+
+- See `TODO.md` in the project root for a prioritized list of missing KOF codes, parser improvements and suggested implementation steps.
+
+These notes are intentionally concise and actionable for Copilot-style automation and for maintainers scanning the repo.
