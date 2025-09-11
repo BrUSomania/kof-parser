@@ -37,3 +37,8 @@ coverage/
 # package-lock.json  <-- keep lockfile for reproducible installs and CI caching
 yarn.lock
 pnpm-lock.yaml
+
+# Ignore local debug helper scripts
+scripts/*_debug.js
+scripts/inspect_meta.js
+scripts/escaped_inspect.js

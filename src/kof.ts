@@ -32,7 +32,7 @@ export function parseKOFRow(line: string, lineIdx: number, warnings: string[], o
   };
 
   // Helper to ensure returned object uses easting=x, northing=y ordering.
-  const finalize = (easting: number, northing: number, elevation: number, name?: string, code?: string, strategy?: string) => {
+  const finalize = (easting: number, northing: number, elevation: number, name?: string, code?: string, strategy?: string, extraAttrs: Record<string, any> = {}) => {
     // If the parsed values look swapped (north/east inverted), try swapping to recover
     if (!isPlausibleCoord(northing, easting) && isPlausibleCoord(easting, northing)) {
       // swap
@@ -41,7 +41,7 @@ export function parseKOFRow(line: string, lineIdx: number, warnings: string[], o
       northing = tmp;
       strategy = strategy ? `${strategy}-swapped` : 'swapped';
     }
-    return { easting, northing, elevation, name, code, strategy, attrs: opts.attrs || {} };
+  return { easting, northing, elevation, name, code, strategy, attrs: { ...(opts.attrs || {}), ...extraAttrs } };
   };
 
   // 1) Columns-first attempt (based on README fixed widths)
@@ -58,7 +58,23 @@ export function parseKOFRow(line: string, lineIdx: number, warnings: string[], o
     const easting = normalizeNum(eastField)!;
     const elevation = elevField && numRe.test(elevField) ? normalizeNum(elevField)! : -500;
     if (isPlausibleCoord(northing, easting) || isPlausibleCoord(easting, northing)) {
-      return finalize(easting, northing, elevation, nameField || undefined, codeField || undefined, 'columns');
+      // capture any trailing text after the fixed-width fields
+      const trailing = afterCode.length > nameWidth + codeWidth + northWidth + eastWidth + elevWidth
+        ? afterCode.substr(nameWidth + codeWidth + northWidth + eastWidth + elevWidth).trim()
+        : '';
+      const extra: Record<string, any> = {};
+      if (trailing) {
+        // try to parse key=value pairs
+        const kvRe = /([^\s=]+)=("([^"]*)"|'([^']*)'|([^\s]+))/g;
+        let mm: RegExpExecArray | null;
+        while ((mm = kvRe.exec(trailing)) !== null) {
+          const k = mm[1];
+          const v = mm[3] !== undefined ? mm[3] : (mm[4] !== undefined ? mm[4] : mm[5]);
+          extra[k] = typeof v === 'string' ? v.replace(/\\(["'\\])/g, '$1') : v;
+        }
+        if (Object.keys(extra).length === 0) extra._extra = trailing.split(/\s+/);
+      }
+      return finalize(easting, northing, elevation, nameField || undefined, codeField || undefined, 'columns', extra);
     }
     // fallthrough to token-based heuristics if columns look numeric but implausible
   }
@@ -89,11 +105,25 @@ export function parseKOFRow(line: string, lineIdx: number, warnings: string[], o
 
   let metaTokens: string[] = [];
   // Helper to build return object
-  const build = (north: number, east: number, elev: number, metaStartCount: number, strat: string) => {
+  const build = (north: number, east: number, elev: number, metaStartCount: number, strat: string, lastNumIdx: number) => {
     metaTokens = tokens.slice(0, metaStartCount);
     const name = metaTokens.length >= 1 ? metaTokens[0] : undefined;
     const code = metaTokens.length >= 2 ? metaTokens[1] : undefined;
-  return finalize(east, north, elev, name, code, strat);
+    // capture trailing tokens after last numeric token
+    const trailingToks = tokens.slice(lastNumIdx + 1);
+    const extra: Record<string, any> = {};
+    if (trailingToks.length > 0) {
+      const trailingStr = trailingToks.join(' ');
+      const kvRe = /([^\s=]+)=("((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\s]+))/g;
+      let mm: RegExpExecArray | null;
+      while ((mm = kvRe.exec(trailingStr)) !== null) {
+        const k = mm[1];
+        const v = mm[3] !== undefined ? mm[3] : (mm[4] !== undefined ? mm[4] : mm[5]);
+        extra[k] = typeof v === 'string' ? v.replace(/\\(["'\\])/g, '$1') : v;
+      }
+      if (Object.keys(extra).length === 0) extra._extra = trailingToks;
+    }
+    return finalize(east, north, elev, name, code, strat, extra);
   };
 
   // Strategy A: last 3 tokens contiguous at end (north, east, elev) or last 2 tokens (north,east)
@@ -108,15 +138,15 @@ export function parseKOFRow(line: string, lineIdx: number, warnings: string[], o
         const b = prev.n;
         const c = last.n;
         // prefer [north,east,elev] when elevation magnitude looks small and north/east plausible
-        if (Math.abs(c) < 1000 && isPlausibleCoord(a, b)) return build(a, b, c, tokens.length - 3, 'tokens-end-3');
-        // otherwise, if b/c look like north/east accept them
-        if (isPlausibleCoord(b, c)) return build(b, c, -500, tokens.length - 3, 'tokens-end-3-large');
+  if (Math.abs(c) < 1000 && isPlausibleCoord(a, b)) return build(a, b, c, tokens.length - 3, 'tokens-end-3', numToks[numToks.length - 1].idx);
+  // otherwise, if b/c look like north/east accept them
+  if (isPlausibleCoord(b, c)) return build(b, c, -500, tokens.length - 3, 'tokens-end-3-large', numToks[numToks.length - 1].idx);
       }
       // last-2 contiguous: [.. north, east]
       const north = prev.n;
       const east = last.n;
       const elev = -500;
-      if (isPlausibleCoord(north, east)) return build(north, east, elev, tokens.length - 2, 'tokens-end-2');
+  if (isPlausibleCoord(north, east)) return build(north, east, elev, tokens.length - 2, 'tokens-end-2', last.idx);
     }
   }
 
@@ -126,7 +156,7 @@ export function parseKOFRow(line: string, lineIdx: number, warnings: string[], o
     const north = normalizeNum(tokens[decIdx])!;
     const east = normalizeNum(tokens[decIdx + 1])!;
     const elev = (decIdx + 2 < tokens.length && numRe.test(tokens[decIdx + 2])) ? normalizeNum(tokens[decIdx + 2])! : -500;
-  if (isPlausibleCoord(north, east) || isPlausibleCoord(east, north)) return build(north, east, elev, decIdx, 'decimal-scan');
+  if (isPlausibleCoord(north, east) || isPlausibleCoord(east, north)) return build(north, east, elev, decIdx, 'decimal-scan', decIdx + 1);
   }
 
   // Strategy C: scan left-to-right for a large-magnitude numeric that looks like a northing
@@ -137,7 +167,7 @@ export function parseKOFRow(line: string, lineIdx: number, warnings: string[], o
       if (numRe.test(tokens[i + 1])) {
         const maybeEast = normalizeNum(tokens[i + 1])!;
         const maybeElev = (i + 2 < tokens.length && numRe.test(tokens[i + 2])) ? normalizeNum(tokens[i + 2])! : -500;
-        if (isPlausibleCoord(maybeNorth, maybeEast)) return build(maybeNorth, maybeEast, maybeElev, i, 'large-first');
+  if (isPlausibleCoord(maybeNorth, maybeEast)) return build(maybeNorth, maybeEast, maybeElev, i, 'large-first', i + 1);
       }
     }
   }
@@ -288,14 +318,23 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
       }
     } else if (code === '11' || code === '12') {
       // Attribute/annotation rows: attach to next geometry
-      // Minimal parsing: if tokens contain key=value pairs, parse, else store raw tokens
-      const toks = rawLine.trim().split(/\s+/).slice(1);
+      // Improved parsing: support key="multi token value" and key='single quoted' as well as unquoted key=value
+  const remainder = rawLine.replace(/^\s*(11|12)\b\s*/, '').trim();
+      
       const attrs: Record<string, any> = {};
-      for (const t of toks) {
-        const kv = (t as string).split('=');
-        if (kv.length === 2) attrs[kv[0]] = kv[1];
+      // Matches: key="double quoted (allows escaped \" inside)" OR key='single quoted (allows escaped \\' inside)' OR key=unquoted
+      const attrRe = /([^\s=]+)=("((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\s]+))/g;
+      let m: RegExpExecArray | null;
+      while ((m = attrRe.exec(remainder)) !== null) {
+        const key = m[1];
+        let val = m[3] !== undefined ? m[3] : (m[4] !== undefined ? m[4] : m[5]);
+        // Unescape escaped quotes and backslashes inside quoted values (only after matching)
+        if (typeof val === 'string') {
+          val = val.replace(/\\(["'\\])/g, '$1');
+        }
+        attrs[key] = val;
       }
-      if (Object.keys(attrs).length > 0) pendingAttrs = attrs; else pendingAttrs = { _raw: toks };
+  if (Object.keys(attrs).length > 0) pendingAttrs = attrs; else pendingAttrs = { _raw: remainder.split(/\s+/) };
     } else {
       // Unknown or unsupported code
       warnings.push(`KOF line ${i + 1} has unknown code '${code}'.`);
