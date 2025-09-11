@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { KOF } = require('../../dist/kof-parser.cjs.js');
+const { writeKofLog } = require('./log_helper');
 
 describe('parseKOFRow canonical cases', function() {
   it('parses columns-style row with header', function() {
@@ -13,6 +14,7 @@ describe('parseKOFRow canonical cases', function() {
   assert.strictEqual(p.x, 314103.268);
   assert.strictEqual(p.y, 6540290.081);
     assert.strictEqual(p.z, 7.934);
+  writeKofLog(k, 't1.kof');
   });
 
   it('parses whitespace-separated row', function() {
@@ -26,6 +28,7 @@ describe('parseKOFRow canonical cases', function() {
   assert.strictEqual(p.x, 314124.25);
   assert.strictEqual(p.y, 6540265.19);
     assert.strictEqual(p.z, 2.264);
+  writeKofLog(k, 't2.kof');
   });
 
   it('defaults missing elevation to -500', function() {
@@ -36,6 +39,7 @@ describe('parseKOFRow canonical cases', function() {
     assert(Array.isArray(geoms) && geoms.length === 1);
     const p = geoms[0];
     assert.strictEqual(p.z, -500);
+  writeKofLog(k, 't3.kof');
   });
 
   it('emits warning for malformed rows and produces no geometry', function() {
@@ -43,6 +47,9 @@ describe('parseKOFRow canonical cases', function() {
     const k = new KOF('t4.kof', content);
     k.parse();
     const geoms = k.toWkbGeometries();
-    assert((!Array.isArray(geoms) || geoms.length === 0) && k.warnings.length > 0);
+  assert((!Array.isArray(geoms) || geoms.length === 0) && k.warnings.length > 0);
+  assert(typeof k.warnings[0].line === 'number');
+  assert(typeof k.warnings[0].message === 'string');
+  writeKofLog(k, 't4.kof');
   });
 });

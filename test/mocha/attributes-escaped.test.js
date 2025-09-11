@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { KOF, WkbGeomPoint } = require('../../dist/kof-parser.cjs.js');
+const { writeKofLog } = require('./log_helper');
 
 describe('attributes with escaped quotes', function() {
   it('parses escaped double quotes inside double-quoted value', function() {
@@ -11,6 +12,7 @@ describe('attributes with escaped quotes', function() {
     const p = geoms[0];
     assert(p instanceof WkbGeomPoint);
     assert(p.meta && p.meta.owner === 'Alice "The Ace" Smith');
+  writeKofLog(k, 'esc1.kof');
   });
 
   it('parses escaped single quotes inside single-quoted value', function() {
@@ -21,5 +23,6 @@ describe('attributes with escaped quotes', function() {
     assert(geoms.length === 1);
     const p = geoms[0];
     assert(p.meta && p.meta.note === "It's a test");
+  writeKofLog(k, 'esc2.kof');
   });
 });

@@ -1,6 +1,7 @@
 const assert = require('assert');
 const iconv = require('iconv-lite');
 const { KOF } = require('../../dist/kof-parser.cjs.js');
+const { writeKofLog } = require('./log_helper');
 
 describe('windows-1252 decoding via iconv-lite', function() {
   it('decodes win1252 bytes and parses special characters æøå', function() {
@@ -12,7 +13,8 @@ describe('windows-1252 decoding via iconv-lite', function() {
     k.parse();
     const geoms = k.toWkbGeometries();
     assert(geoms.length === 1);
-    const meta = geoms[0].meta || {};
-    assert(meta.owner && meta.owner.indexOf('æ') !== -1);
+  const meta = geoms[0].meta || {}; 
+  assert(meta.owner && meta.owner.indexOf('æ') !== -1);
+  writeKofLog(k, 'win1252.kof');
   });
 });

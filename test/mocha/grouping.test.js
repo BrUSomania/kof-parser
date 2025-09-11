@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { KOF, WkbGeomLinestring, WkbGeomPolygon } = require('../../dist/kof-parser.cjs.js');
+const { writeKofLog } = require('./log_helper');
 
 describe('grouping (lines & polygons)', function() {
   it('parses a linestring group (09..91 start / 09..99 end)', function() {
@@ -17,6 +18,7 @@ describe('grouping (lines & polygons)', function() {
     assert.strictEqual(p0.y, 6540265.19);
     assert.strictEqual(p1.x, 314125.25);
     assert.strictEqual(p1.y, 6540266.19);
+  writeKofLog(k, 'lines.kof');
   });
 
   it('parses a polygon group and ensures ring is closed', function() {
@@ -35,5 +37,6 @@ describe('grouping (lines & polygons)', function() {
     const last = ring.points[ring.points.length - 1];
     assert.strictEqual(first.x, last.x);
     assert.strictEqual(first.y, last.y);
+  writeKofLog(k, 'poly.kof');
   });
 });

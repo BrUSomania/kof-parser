@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { KOF, WkbGeomPoint, WkbGeomLinestring } = require('../../dist/kof-parser.cjs.js');
+const { writeKofLog } = require('./log_helper');
 
 describe('attributes (11/12) attach to next geometry', function() {
   it('attaches attribute to next standalone point', function() {
@@ -12,6 +13,7 @@ describe('attributes (11/12) attach to next geometry', function() {
     assert(p instanceof WkbGeomPoint);
     // pendingAttrs should have been applied to point.meta
     assert(p.meta && p.meta.owner === 'alice');
+  writeKofLog(k, 'attr1.kof');
   });
 
   it('attaches attribute to next group (linestring)', function() {
@@ -24,5 +26,6 @@ describe('attributes (11/12) attach to next geometry', function() {
     assert(g instanceof WkbGeomLinestring);
     // pendingAttrs should have been applied to linestring.meta
     assert(g.meta && g.meta.route === 'main');
+  writeKofLog(k, 'attr2.kof');
   });
 });

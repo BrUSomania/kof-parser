@@ -9,6 +9,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 test/logs/*
+test/mocha/logs/*
+test/geojson/*
 
 # OS files
 .DS_Store

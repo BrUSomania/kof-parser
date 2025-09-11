@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { KOF } = require('../../dist/kof-parser.cjs.js');
+const { writeKofLog } = require('./log_helper');
 
 describe('encodings, unicode and extra params', function() {
   it('handles UTF-8 content and UTF-8 BOM', function() {
@@ -13,6 +14,8 @@ describe('encodings, unicode and extra params', function() {
     const k2 = new KOF('utf8bom.kof', bom);
     k2.parse();
     assert(k2.toWkbGeometries().length === 1);
+  writeKofLog(k1, 'utf8.kof');
+  writeKofLog(k2, 'utf8bom.kof');
   });
 
   it('handles emoji and other unicode characters', function() {
@@ -43,6 +46,7 @@ describe('encodings, unicode and extra params', function() {
     const k = new KOF('extra.kof', body);
     k.parse();
     const geoms = k.toWkbGeometries();
+  writeKofLog(k, 'extra.kof');
     assert(geoms.length === 1);
     const meta = geoms[0].meta || {};
     // Either key present or _extra recorded
@@ -61,6 +65,7 @@ describe('encodings, unicode and extra params', function() {
       assert(f.geometry && f.properties);
       // basic geometry types
       assert(['Point', 'LineString', 'Polygon'].includes(f.geometry.type));
-    }
+  }
+  writeKofLog(k, 'geo.kof');
   });
 });

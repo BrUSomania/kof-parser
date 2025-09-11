@@ -1,17 +1,25 @@
 
 import { WkbGeomPoint, WkbGeomLinestring, WkbGeomPolygon } from './geometry';
+// Lazy require proj4 to avoid hard dependency surprises in some consumers
+let proj4: any = (() => {
+  try { return (typeof require !== 'undefined') ? require('proj4') : null; } catch (e) { return null; }
+})();
+
+// Test helper: allow tests to override the internal proj4 used by the parser
+export function __setProj4(p: any) { proj4 = p; }
 
 // Types for parser output
 export type Geometry = WkbGeomPoint | WkbGeomLinestring | WkbGeomPolygon;
+export interface WarningObj { line: number; message: string; code?: string }
 export interface ParseResult {
   geometries: Geometry[];
-  warnings: string[];
+  warnings: WarningObj[];
   diagnostics?: { line: number, strategy: string }[];
 }
 
 // Parse a KOF row (line) into an object with easting, northing, elevation
 export type ParseRowOptions = { mode?: 'columns' | 'tokens', attrs?: Record<string, any> };
-export function parseKOFRow(line: string, lineIdx: number, warnings: string[], opts: ParseRowOptions = {}): { easting: number, northing: number, elevation: number, name?: string, code?: string, strategy?: string, attrs?: Record<string, any> } | null {
+export function parseKOFRow(line: string, lineIdx: number, warnings: WarningObj[], opts: ParseRowOptions = {}): { easting: number, northing: number, elevation: number, name?: string, code?: string, strategy?: string, attrs?: Record<string, any> } | null {
   const raw = line.replace(/\r?\n$/, '');
   // Helper parsers
   const normalizeNum = (s: string) => {
@@ -82,13 +90,13 @@ export function parseKOFRow(line: string, lineIdx: number, warnings: string[], o
   // 2) Token-based heuristics
   const tokens = raw.trim().split(/\s+/);
   if (tokens.length === 0) {
-    warnings.push(`KOF line ${lineIdx + 1} malformed: empty row.`);
+    warnings.push({ line: lineIdx + 1, message: `KOF line ${lineIdx + 1} malformed: empty row.` });
     return null;
   }
   // drop leading '05' if present
   if (tokens[0] === '05') tokens.shift();
   if (tokens.length === 0) {
-    warnings.push(`KOF line ${lineIdx + 1} malformed: no data after '05'.`);
+    warnings.push({ line: lineIdx + 1, message: `KOF line ${lineIdx + 1} malformed: no data after '05'.` });
     return null;
   }
 
@@ -173,7 +181,7 @@ export function parseKOFRow(line: string, lineIdx: number, warnings: string[], o
   }
 
   // If we reach here, we couldn't find plausible coordinates
-  warnings.push(`KOF line ${lineIdx + 1} malformed: invalid coordinates.`);
+  warnings.push({ line: lineIdx + 1, message: `KOF line ${lineIdx + 1} malformed: invalid coordinates.` });
   return null;
 }
 
@@ -183,8 +191,9 @@ export type ParseOptions = { mode?: 'auto' | 'columns' | 'tokens' };
 export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult {
   const lines = content.split(/\r?\n/);
   const geometries: Geometry[] = [];
-  const warnings: string[] = [];
+  const warnings: WarningObj[] = [];
   const diagnostics: { line: number, strategy: string }[] = [];
+  const fileMetadata: Record<string, any> = {};
   const mode = opts.mode || 'auto';
   // Detect header row if present (e.g. '-05 PPPPPPPPPP KKKKKKKK ...') and force columns parsing
   const hasHeader = lines.some(l => l.trim().startsWith('-05'));
@@ -198,19 +207,39 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
   // Attribute rows (attach to next geometry)
   let pendingAttrs: Record<string, any> | null = null;
 
+  // Helper to parse key=value pairs (supports quoted values and escaped quotes)
+  const parseAttrsFrom = (line: string): Record<string, any> => {
+    const remainder = line.replace(/^\s*(10|20|30|11|12)\b\s*/, '').trim();
+    const attrs: Record<string, any> = {};
+    const kvRe = /([^\s=]+)=("((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\s]+))/g;
+    let m: RegExpExecArray | null;
+    while ((m = kvRe.exec(remainder)) !== null) {
+      const k = m[1];
+      let v = m[3] !== undefined ? m[3] : (m[4] !== undefined ? m[4] : m[5]);
+      if (typeof v === 'string') v = v.replace(/\\(["'\\])/g, '$1');
+      attrs[k] = v;
+    }
+    if (Object.keys(attrs).length === 0) return { _raw: remainder.split(/\s+/).filter(Boolean) };
+    return attrs;
+  };
+
   function flushGroup() {
     if (!inGroup || !groupType || groupRows.length === 0) return;
-  const points = groupRows.map(r => new WkbGeomPoint(r.easting, r.northing, r.elevation, { name: r.name, code: r.code, ...(r.attrs||{}) }));
+  const points = groupRows.map(r => new WkbGeomPoint(r.easting, r.northing, r.elevation, { name: r.name || null, fcode: r.code || null, code: r.code, ...(r.attrs||{}) }));
     if (groupType === 'linestring') {
       if (points.length >= 2) {
         const ls = new WkbGeomLinestring(points);
-        if (pendingAttrs) ls.meta = pendingAttrs;
+        // Ensure linestring meta has name and fcode (take from first point if missing)
+        ls.meta = pendingAttrs ? { ...(pendingAttrs||{}) } : {};
+        const firstMeta = points[0].meta || {};
+        if (!('name' in ls.meta)) ls.meta.name = firstMeta.name || null;
+        if (!('fcode' in ls.meta)) ls.meta.fcode = firstMeta.fcode || null;
         geometries.push(ls);
       } else {
-        warnings.push(`Line group at line ${groupStartLine + 1} has less than 2 points, ignored.`);
+        warnings.push({ line: groupStartLine + 1, message: `Line group at line ${groupStartLine + 1} has less than 2 points, ignored.`, code: '09' });
       }
-    } else if (groupType === 'polygon') {
-      if (points.length >= 3) {
+  } else if (groupType === 'polygon') {
+  if (points.length >= 3) {
         // Ensure polygon is closed
         const closed = points.length >= 4 && points[0].x === points[points.length - 1].x && points[0].y === points[points.length - 1].y;
         if (!closed) {
@@ -219,11 +248,14 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
           points.push(new WkbGeomPoint(p0.x, p0.y, p0.z, p0.meta));
         }
         // Polygon expects array of rings, each ring is a WkbGeomLinestring
-    const poly = new WkbGeomPolygon([new WkbGeomLinestring(points)]);
-    if (pendingAttrs) poly.meta = pendingAttrs;
+  const poly = new WkbGeomPolygon([new WkbGeomLinestring(points)]);
+  poly.meta = pendingAttrs ? { ...(pendingAttrs||{}) } : {};
+  const firstMeta = points[0].meta || {};
+  if (!('name' in poly.meta)) poly.meta.name = firstMeta.name || null;
+  if (!('fcode' in poly.meta)) poly.meta.fcode = firstMeta.fcode || null;
     geometries.push(poly);
-      } else {
-        warnings.push(`Polygon group at line ${groupStartLine + 1} has less than 3 points, ignored.`);
+        } else {
+        warnings.push({ line: groupStartLine + 1, message: `Polygon group at line ${groupStartLine + 1} has less than 3 points, ignored.`, code: '09' });
       }
     }
     // Reset group state
@@ -237,26 +269,44 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
   for (let i = 0; i < lines.length; ++i) {
     const rawLine = lines[i];
     const line = rawLine.trim();
-    if (!line) continue;
-    if (line.startsWith('-')) {
+  if (!line) continue;
+  if (line.startsWith('-')) {
       // Ignore comment/ignored lines
       // Group consecutive ignored lines
-      if (warnings.length > 0 && warnings[warnings.length - 1].startsWith('KOF lines')) {
+      if (warnings.length > 0 && warnings[warnings.length - 1].message && warnings[warnings.length - 1].message.startsWith('KOF lines')) {
         // Already grouped
-        const last = warnings[warnings.length - 1];
+        const last = warnings[warnings.length - 1].message;
         const match = last.match(/KOF lines (\d+) to (\d+) ignored/);
         if (match && parseInt(match[2]) === i) {
           // Extend range
-          warnings[warnings.length - 1] = `KOF lines ${match[1]} to ${i + 1} ignored (start with '-')`;
+          warnings[warnings.length - 1] = { line: warnings[warnings.length - 1].line, message: `KOF lines ${match[1]} to ${i + 1} ignored (start with '-')` };
         } else {
-          warnings.push(`KOF lines ${i + 1} ignored (start with '-')`);
+          warnings.push({ line: i + 1, message: `KOF lines ${i + 1} ignored (start with '-')` });
         }
       } else {
-        warnings.push(`KOF lines ${i + 1} ignored (start with '-')`);
+        warnings.push({ line: i + 1, message: `KOF lines ${i + 1} ignored (start with '-')` });
       }
       continue;
     }
     const code = line.substring(0, 2);
+    // New codes: 10,20,30 handling
+    if (code === '10') {
+      // Header/metadata line - parse key=value pairs and attach to file metadata
+      const attrs = parseAttrsFrom(rawLine);
+      Object.assign(fileMetadata, attrs);
+      continue;
+    }
+    if (code === '20') {
+      // Measurement / auxiliary line - record in warnings for now
+      const attrs = parseAttrsFrom(rawLine);
+      warnings.push({ line: i + 1, message: `KOF line ${i + 1} measurement/20 parsed: ${JSON.stringify(attrs)}`, code: '20' });
+      continue;
+    }
+    if (code === '30') {
+      // Additional attributes line - attach to next geometry
+      pendingAttrs = parseAttrsFrom(rawLine);
+      continue;
+    }
     if (code === '05') {
       // Point observation
       // Pass the original untrimmed line to parseKOFRow so fixed-column slicing is accurate
@@ -268,7 +318,7 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
         groupRows.push(row);
       } else {
   // Standalone point (attach meta) - store as (easting, northing)
-  const p = new WkbGeomPoint(row.easting, row.northing, row.elevation, { name: row.name, code: row.code, ...(row.attrs||{}) });
+  const p = new WkbGeomPoint(row.easting, row.northing, row.elevation, { name: row.name || null, fcode: row.code || null, code: row.code, ...(row.attrs||{}) });
   if (pendingAttrs) p.meta = { ...(p.meta||{}), ...pendingAttrs };
   geometries.push(p);
   pendingAttrs = null;
@@ -287,23 +337,23 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
         groupStartLine = i;
         // Defensive: if line also contains 99 or 96, treat as malformed
         if (line.includes('99')) {
-          warnings.push(`KOF line ${i + 1} has both 91 and 99, skipping group.`);
+          warnings.push({ line: i + 1, message: `KOF line ${i + 1} has both 91 and 99, skipping group.`, code: '09' });
           inGroup = false;
           groupRows = [];
           groupType = null;
         } else if (line.includes('96')) {
-          warnings.push(`KOF line ${i + 1} has both 91 and 96, skipping group.`);
+          warnings.push({ line: i + 1, message: `KOF line ${i + 1} has both 91 and 96, skipping group.`, code: '09' });
           inGroup = false;
           groupRows = [];
           groupType = null;
         }
       } else if (line.includes('99')) {
         // End of linestring group
-        if (inGroup) {
+          if (inGroup) {
           groupType = 'linestring';
           flushGroup();
         } else {
-          warnings.push(`KOF line ${i + 1} has 99 but no open group.`);
+          warnings.push({ line: i + 1, message: `KOF line ${i + 1} has 99 but no open group.`, code: '09' });
         }
       } else if (line.includes('96')) {
         // End of polygon group
@@ -311,10 +361,10 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
           groupType = 'polygon';
           flushGroup();
         } else {
-          warnings.push(`KOF line ${i + 1} has 96 but no open group.`);
+          warnings.push({ line: i + 1, message: `KOF line ${i + 1} has 96 but no open group.`, code: '09' });
         }
       } else {
-        warnings.push(`KOF line ${i + 1} has unknown 09 code.`);
+        warnings.push({ line: i + 1, message: `KOF line ${i + 1} has unknown 09 code.`, code: '09' });
       }
     } else if (code === '11' || code === '12') {
       // Attribute/annotation rows: attach to next geometry
@@ -337,12 +387,12 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
   if (Object.keys(attrs).length > 0) pendingAttrs = attrs; else pendingAttrs = { _raw: remainder.split(/\s+/) };
     } else {
       // Unknown or unsupported code
-      warnings.push(`KOF line ${i + 1} has unknown code '${code}'.`);
+      warnings.push({ line: i + 1, message: `KOF line ${i + 1} has unknown code '${code}'.`, code });
     }
   }
   // Flush any remaining group at EOF
   flushGroup();
-  return { geometries, warnings, diagnostics };
+  return { geometries, warnings, diagnostics, ...(fileMetadata && { metadata: fileMetadata }) } as any;
 }
 
 // KOF class wrapper (API used by tests)
@@ -351,14 +401,40 @@ export class KOF {
   fileContent: string;
   parsedData: any[] | null = null;
   errors: string[] = [];
-  warnings: string[] = [];
+  warnings: WarningObj[] = [];
   diagnostics: { line: number, strategy: string }[] = [];
   metadata: Record<string, any> = {};
+  // optional CRS settings (string like 'EPSG:25832')
+  sourceCrs: string | null = null;
+  targetCrs: string | null = null;
 
-  constructor(fileName: string, fileContent: string) {
+  constructor(fileName: string, fileContent: string, opts?: { sourceCrs?: string, targetCrs?: string }) {
     this.fileName = fileName;
     this.fileContent = fileContent;
     this.metadata = { name: fileName, size: fileContent.length, type: 'text/kof' };
+    if (opts) {
+      if (opts.sourceCrs) { this.sourceCrs = opts.sourceCrs; this.metadata.sourceCrs = opts.sourceCrs; }
+      if (opts.targetCrs) { this.targetCrs = opts.targetCrs; this.metadata.targetCrs = opts.targetCrs; }
+    }
+  }
+
+  setSourceCrs(crs: string | null) { this.sourceCrs = crs; if (crs) this.metadata.sourceCrs = crs; }
+  setTargetCrs(crs: string | null) { this.targetCrs = crs; if (crs) this.metadata.targetCrs = crs; }
+
+  // Convenience: reproject the parsed geometries to a target CRS and return GeoJSON.
+  // If proj4 is unavailable, returns the original GeoJSON and records a metadata warning.
+  reproject(targetCrs: string) {
+    const src = this.sourceCrs || (this.metadata && this.metadata.sourceCrs) || null;
+    if (!src) {
+      this.metadata.reprojectionError = 'Source CRS not set on KOF';
+      return this.toGeoJSON();
+    }
+    if (!proj4) {
+      this.metadata.reprojectionError = 'proj4 not available';
+      return this.toGeoJSON();
+    }
+    // Defer to toGeoJSON's per-call option shape
+    return this.toGeoJSON({ crs: { from: src, to: targetCrs } });
   }
 
   parse() {
@@ -369,31 +445,45 @@ export class KOF {
   this.warnings = res.warnings || [];
   this.diagnostics = res.diagnostics || [];
   this.errors = [];
+  if ((res as any).metadata) Object.assign(this.metadata, (res as any).metadata);
   // Build parsedData roughly from content lines for compatibility with tests
   this.parsedData = this.fileContent.split(/\r?\n/).map((l, idx) => ({ row: idx + 1, fields: l.trim().split(/\s+/) }));
   // expose mode
   this.metadata.parserMode = this.metadata.mode;
+  this.warnings = res.warnings || [];
+  this.diagnostics = res.diagnostics || [];
   return this.parsedData;
   }
 
   toWkbGeometries() {
-    const res = parseKOF(this.fileContent, { mode: this.metadata.mode === 'columns' ? 'columns' : 'auto' });
+  const res = parseKOF(this.fileContent, { mode: this.metadata.mode === 'columns' ? 'columns' : 'auto' });
+  if ((res as any).metadata) Object.assign(this.metadata, (res as any).metadata);
     return res.geometries;
   }
 
-  toGeoJSON() {
-    const geoms = this.toWkbGeometries();
+  toGeoJSON(opts?: { sourceCrs?: string | null, targetCrs?: string | null, crs?: { from?: string | null, to?: string | null } }) {
+  const geoms = this.toWkbGeometries();
     const features: any[] = [];
     const geomToFeature = (g: Geometry) => {
       if (g instanceof WkbGeomPoint) {
         const coords = g.z !== undefined ? [g.x, g.y, g.z] : [g.x, g.y];
-        return { type: 'Feature', geometry: { type: 'Point', coordinates: coords }, properties: g.meta || {} };
+        const props = { ...(g.meta || {}) };
+        if (!('name' in props)) props.name = null;
+        if (!('fcode' in props)) props.fcode = ('code' in props ? props.code : null);
+        return { type: 'Feature', geometry: { type: 'Point', coordinates: coords }, properties: props };
       } else if (g instanceof WkbGeomLinestring) {
         const coords = g.points.map(p => p.z !== undefined ? [p.x, p.y, p.z] : [p.x, p.y]);
-        return { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: g.meta || {} };
+        const props = { ...(g.meta || {}) };
+        if (!('name' in props)) props.name = (g.points[0] && g.points[0].meta && ('name' in g.points[0].meta)) ? g.points[0].meta.name : null;
+        if (!('fcode' in props)) props.fcode = (g.points[0] && g.points[0].meta && ('fcode' in g.points[0].meta)) ? g.points[0].meta.fcode : null;
+        return { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: props };
       } else if (g instanceof WkbGeomPolygon) {
         const rings = g.rings.map(r => r.points.map(p => p.z !== undefined ? [p.x, p.y, p.z] : [p.x, p.y]));
-        return { type: 'Feature', geometry: { type: 'Polygon', coordinates: rings }, properties: g.meta || {} };
+        const props = { ...(g.meta || {}) };
+        const firstPoint = (g.rings[0] && g.rings[0].points && g.rings[0].points[0]) ? g.rings[0].points[0] : null;
+        if (!('name' in props)) props.name = firstPoint && firstPoint.meta && ('name' in firstPoint.meta) ? firstPoint.meta.name : null;
+        if (!('fcode' in props)) props.fcode = firstPoint && firstPoint.meta && ('fcode' in firstPoint.meta) ? firstPoint.meta.fcode : null;
+        return { type: 'Feature', geometry: { type: 'Polygon', coordinates: rings }, properties: props };
       }
       return null;
     };
@@ -401,7 +491,36 @@ export class KOF {
       const f = geomToFeature(g);
       if (f) features.push(f);
     }
-    return { type: 'FeatureCollection', features };
+    const gj = { type: 'FeatureCollection', features };
+    // Determine effective source/target CRS: per-call opts override instance settings
+  // Prefer crs.from/crs.to when provided (new option shape). Fall back to older opts keys or instance metadata.
+  const src = (opts && opts.crs && opts.crs.from) || (opts && opts.sourceCrs) || this.sourceCrs || (this.metadata && this.metadata.sourceCrs) || null;
+  const tgt = (opts && opts.crs && opts.crs.to) || (opts && opts.targetCrs) || this.targetCrs || (this.metadata && this.metadata.targetCrs) || null;
+    if (proj4 && src && tgt && src.toLowerCase() !== tgt.toLowerCase()) {
+      const reproject = (inGJ: any, from: string, to: string) => {
+        const out = JSON.parse(JSON.stringify(inGJ));
+        const transformCoords = (coords: any): any => {
+          if (typeof coords[0] === 'number') {
+            const [x, y] = coords;
+            const p = proj4(from, to, [x, y]);
+            return [p[0], p[1]];
+          }
+          return coords.map(transformCoords);
+        };
+        for (const f of out.features) {
+          f.geometry.coordinates = transformCoords(f.geometry.coordinates);
+        }
+        return out;
+      };
+      try {
+        return reproject(gj, src, tgt);
+      } catch (e: any) {
+        // If reprojection fails, return the original geojson and leave an error in metadata
+        this.metadata.reprojectionError = String((e && (e as any).message) ? (e as any).message : e);
+        return gj;
+      }
+    }
+    return gj;
   }
 
   getMetadata() {

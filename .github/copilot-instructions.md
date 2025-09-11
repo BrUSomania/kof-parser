@@ -138,4 +138,29 @@ Before starting a new task in the above plan, update progress in the plan.
 
 - See `TODO.md` in the project root for a prioritized list of missing KOF codes, parser improvements and suggested implementation steps.
 
+Release prep notes
+
+- A `LICENSE` file (MIT) was added to the project root.
+- The `package.json` was cleaned to remove accidental core-module devDependencies and is configured to publish `dist/` and `types/`.
+- Tests pass locally; use `npm run build` then `npm pack` to validate the published package contents before `npm publish`.
+
 These notes are intentionally concise and actionable for Copilot-style automation and for maintainers scanning the repo.
+
+-- Project status notes for Copilot
+
+- The parser now supports columns-first parsing with token-based fallbacks and emits structured warnings ({ line, message, code? }).
+- GeoJSON export is implemented and includes `name` (PPPPPPPPPP) and `fcode` (KKKKKKKK) properties; lines/polygons inherit these from the first point when not explicitly set.
+- Tests include proj4-based reprojection for demo files containing `epsg25832` and `epsg5110` in their filenames; tests write `epsg4326` GeoJSON files to `test/geojson/` (these are gitignored).
+- Test harness writes human-readable `.log` files to `test/mocha/logs/` and cleans old logs before running tests.
+
+-- Guidance for future Copilot edits
+
+- When changing parser heuristics, update `test/mocha/` tests and ensure `.log` generation is tolerant of errors (tests should not fail solely because logging failed).
+- If adding reprojection support for additional EPSG codes, register canonical proj4 strings and add a reprojection test similar to `convert_25832.test.js`.
+- If modifying public behaviour of `src/kof.ts`, also run the build (`npm run build`) and update the `dist/` artifacts where appropriate.
+
+-- Recommended immediate tasks for contributors
+
+- Implement a strict `columns` enforcement mode that rejects rows not matching header column widths and emits raw-line diagnostics.
+- Add an API option to `KOF` to request reprojection (e.g., `toGeoJSON({ crs: 'EPSG:4326' })`) and make writing debug outputs opt-in via an environment flag.
+- Add focused unit tests for `parseKOFRow` edge cases and expand warnings to include raw token lists and numeric token indices for easier debugging.

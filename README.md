@@ -8,6 +8,13 @@ A JavaScript/TypeScript parser for Norwegian KOF files. Usable as an ES module o
 - TypeScript and JavaScript support
 - Demo scripts and sample files included
 
+Additional features added during development
+- Export parsed geometries (Point / LineString / Polygon) to GeoJSON.
+- Optionally produce reprojections to EPSG:4326 (lat/lon) for demo files that contain an EPSG hint (currently supports EPSG:25832 and a best-effort EPSG:5110 definition) using proj4.
+- Geometry properties include `name` (PPPPPPPPPP) and `fcode` (KKKKKKKK). Lines/polygons inherit these from their first point when not explicitly set.
+- Tests generate human-readable `.log` output per demo file (under `test/mocha/logs/`) and a `test/geojson/` folder containing produced GeoJSON files (both are gitignored by default).
+- Parser emits structured warnings with line numbers and diagnostic strategies to aid debugging.
+
 ## Example KOF Files
 Example KOF files for testing parsing functionality are located in:
 
@@ -63,6 +70,28 @@ const result = kof.parse(kofString);
   const result = kof.parse(kofString);
 </script>
 ```
+
+## Notes and development status
+
+- The parser prefers fixed-column parsing when a header line (`-05 PPPPPPPPPP KKKKKKKK ...`) is present; for files without a header it falls back to heuristic token parsing.
+- The project includes a comprehensive Mocha test-suite under `test/mocha/` that covers attributes, encodings, grouping, KOF codes and demo GeoJSON exports. Running `npm test` will clean old logs, run tests, and (for demo files) produce GeoJSON and reprojection outputs under `test/geojson/`.
+- Reprojection: `proj4` is used during testing to convert demo files containing `epsg25832` or `epsg5110` in their filenames to EPSG:4326; the converted files are written with `epsg4326` in their filenames.
+- EPSG:5110: the repo registers a reasonable NTM10-like proj4 definition as a best-effort. Replace this definition with an authoritative proj4 string if you have one.
+
+## License
+
+This project is released under the MIT License; see the `LICENSE` file in the repository for full terms.
+
+## Release v0.1.0
+
+- Added explicit `LICENSE` (MIT).
+- Cleaned package metadata (removed accidental core-module devDependencies).
+- Tests and demo exports generate `.log` and `test/geojson/` artifacts (gitignored).
+
+Publishing notes
+
+- The package is configured to publish `dist/` and `types/` via the `files` field in `package.json`. Before publishing, run a fresh build (`npm run build`) and validate the bundle with `npm pack`.
+
 
 ## License
 MIT

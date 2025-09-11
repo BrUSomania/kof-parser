@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { KOF, WkbGeomPoint, WkbGeomLinestring } = require('../../dist/kof-parser.cjs.js');
+const { writeKofLog } = require('./log_helper');
 
 describe('advanced attributes and malformed rows', function() {
   it('parses double-quoted multi-token attribute values', function() {
@@ -12,6 +13,7 @@ describe('advanced attributes and malformed rows', function() {
     assert(p instanceof WkbGeomPoint);
     assert(p.meta && p.meta.owner === 'Alice Smith');
     assert(p.meta && p.meta.description === 'main route');
+  writeKofLog(k, 'adv1.kof');
   });
 
   it('parses single-quoted attribute values and attaches to groups', function() {
@@ -23,6 +25,7 @@ describe('advanced attributes and malformed rows', function() {
     const g = geoms[0];
     assert(g instanceof WkbGeomLinestring);
     assert(g.meta && g.meta.route === 'north-south');
+  writeKofLog(k, 'adv2.kof');
   });
 
   it('stores raw tokens for attribute lines with no key=value', function() {
@@ -34,6 +37,7 @@ describe('advanced attributes and malformed rows', function() {
     const p = geoms[0];
     assert(p.meta && Array.isArray(p.meta._raw));
     assert(p.meta._raw[0] === 'some');
+  writeKofLog(k, 'adv3.kof');
   });
 
   it('handles malformed rows gracefully (missing numeric tokens)', function() {
@@ -43,7 +47,10 @@ describe('advanced attributes and malformed rows', function() {
     const geoms = k.toWkbGeometries();
     // Should be empty due to malformed row
     assert(Array.isArray(geoms) && geoms.length === 0);
-    // warning should be present
-    assert(k.warnings.length > 0);
+  // warning should be present (structured)
+  assert(k.warnings.length > 0);
+  assert(typeof k.warnings[0].line === 'number');
+  assert(typeof k.warnings[0].message === 'string');
+  writeKofLog(k, 'adv4.kof');
   });
 });
