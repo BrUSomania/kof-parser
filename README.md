@@ -71,6 +71,37 @@ const result = kof.parse(kofString);
 </script>
 ```
 
+### Quick API examples
+
+Node / CommonJS (parsing and GeoJSON export):
+
+```js
+const { KOF } = require('kof-parser');
+const fs = require('fs');
+
+const content = fs.readFileSync('demo/kof_files/example.kof', 'utf8');
+const k = new KOF('example.kof', content, { sourceCrs: 'EPSG:25832' });
+k.parse();
+// Export GeoJSON (no reprojection)
+const gj = k.toGeoJSON();
+console.log(gj.type, gj.features.length);
+
+// Reproject to EPSG:4326 (if proj4 available)
+const gj4326 = k.reproject('EPSG:4326');
+console.log('Reprojected:', gj4326.features.length);
+```
+
+ES module example:
+
+```js
+import { KOF } from 'kof-parser';
+const content = await fetch('/demo/kof_files/example.kof').then(r => r.text());
+const k = new KOF('example.kof', content, { sourceCrs: 'EPSG:25832' });
+k.parse();
+const geojson = k.toGeoJSON({ crs: { from: 'EPSG:25832', to: 'EPSG:4326' } });
+console.log(geojson);
+```
+
 ## Notes and development status
 
 - The parser prefers fixed-column parsing when a header line (`-05 PPPPPPPPPP KKKKKKKK ...`) is present; for files without a header it falls back to heuristic token parsing.
