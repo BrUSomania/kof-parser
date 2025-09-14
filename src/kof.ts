@@ -391,13 +391,11 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
           }
           // Assignment logic
           if (multiMode === 'saw') {
-            // Zigzag bounce between lines 0..n-1
+            // Round-robin assignment between lines 0..n-1 (distribute points evenly)
             multiLinesPoints[multiAssign.idx].push(row);
-            // advance
+            // advance (wrap)
             if (multiNumLines > 1) {
-              multiAssign.idx += multiAssign.dir;
-              if (multiAssign.idx >= multiNumLines) { multiAssign.idx = multiNumLines - 2; multiAssign.dir = -1; }
-              if (multiAssign.idx < 0) { multiAssign.idx = 1; multiAssign.dir = 1; }
+              multiAssign.idx = (multiAssign.idx + 1) % multiNumLines;
             }
           } else if (multiMode === 'wave') {
             // Wave pattern: alternates blocks between lines; for code explanation, use a simple strategy:

@@ -10,12 +10,12 @@ describe('Sag multilines (72..79)', function () {
   const cases = [
     { file: '09_72_epsg25832.kof', expected: 4 },
     { file: '09_73_epsg25832.kof', expected: 3 },
-    { file: '09_74_epsg25832.kof', expected: 7 },
+    { file: '09_74_epsg25832.kof', expected: 8 },
     { file: '09_75_epsg25832.kof', expected: 5 },
-    { file: '09_76_epsg25832.kof', expected: 5 },
-    { file: '09_77_epsg25832.kof', expected: 6 },
-    { file: '09_78_epsg25832.kof', expected: 7 },
-    { file: '09_79_epsg25832.kof', expected: 8 }
+    { file: '09_76_epsg25832.kof', expected: 6 },
+    { file: '09_77_epsg25832.kof', expected: 7 },
+    { file: '09_78_epsg25832.kof', expected: 8 },
+    { file: '09_79_epsg25832.kof', expected: 9 }
   ];
 
   cases.forEach(c => {
