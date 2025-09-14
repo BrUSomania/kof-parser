@@ -204,6 +204,20 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
   let groupStartLine: number = 0;
   let inGroup = false;
   let lastGroupEndLine = -1;
+  // Multi-line pattern state (codes 72-79 = saw/zigzag, 82-89 = wave)
+  let multiMode: null | 'saw' | 'wave' = null;
+  let multiNumLines = 0;
+  let multiLinesPoints: any[][] = [];
+  // internal state for assignment
+  let multiAssign = {
+    // for saw: idx and dir for zigzag bounce
+    idx: 0,
+    dir: 1,
+    // for wave (numLines==2): flags
+    firstAssigned: false,
+    waveTarget: 1,
+    waveRemaining: 0
+  };
   // Attribute rows (attach to next geometry)
   let pendingAttrs: Record<string, any> | null = null;
 
@@ -225,6 +239,55 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
 
   function flushGroup() {
     if (!inGroup || !groupType || groupRows.length === 0) return;
+  // If multiMode is active, build per-line geometries from multiLinesPoints
+  if (multiMode && multiLinesPoints && multiLinesPoints.length > 0) {
+    if (groupType === 'linestring') {
+      for (let li = 0; li < multiLinesPoints.length; li++) {
+        const pts = multiLinesPoints[li].map(r => new WkbGeomPoint(r.easting, r.northing, r.elevation, { name: r.name || null, fcode: r.code || null, code: r.code, ...(r.attrs||{}) }));
+        if (pts.length >= 2) {
+          const ls = new WkbGeomLinestring(pts);
+          ls.meta = pendingAttrs ? { ...(pendingAttrs||{}) } : {};
+          const firstMeta = pts[0].meta || {};
+          if (!('name' in ls.meta)) ls.meta.name = firstMeta.name || null;
+          if (!('fcode' in ls.meta)) ls.meta.fcode = firstMeta.fcode || null;
+          geometries.push(ls);
+        } else {
+          warnings.push({ line: groupStartLine + 1, message: `Multi-line segment ${li} in group at line ${groupStartLine + 1} has less than 2 points, ignored.`, code: '09' });
+        }
+      }
+    } else if (groupType === 'polygon') {
+      // For polygons with multi-lines, try to create polygons from the first non-empty line only
+      const firstNonEmpty = multiLinesPoints.find(p => p.length >= 3);
+      if (firstNonEmpty) {
+        const pts = firstNonEmpty.map(r => new WkbGeomPoint(r.easting, r.northing, r.elevation, { name: r.name || null, fcode: r.code || null, code: r.code, ...(r.attrs||{}) }));
+        const closed = pts.length >= 4 && pts[0].x === pts[pts.length - 1].x && pts[0].y === pts[pts.length - 1].y;
+        if (!closed) {
+          const p0 = pts[0];
+          pts.push(new WkbGeomPoint(p0.x, p0.y, p0.z, p0.meta));
+        }
+        const poly = new WkbGeomPolygon([new WkbGeomLinestring(pts)]);
+        poly.meta = pendingAttrs ? { ...(pendingAttrs||{}) } : {};
+        const firstMeta = pts[0].meta || {};
+        if (!('name' in poly.meta)) poly.meta.name = firstMeta.name || null;
+        if (!('fcode' in poly.meta)) poly.meta.fcode = firstMeta.fcode || null;
+        geometries.push(poly);
+      } else {
+        warnings.push({ line: groupStartLine + 1, message: `Polygon group at line ${groupStartLine + 1} has no sufficiently large multi-line ring, ignored.`, code: '09' });
+      }
+    }
+    // reset multiMode state
+    multiMode = null;
+    multiNumLines = 0;
+    multiLinesPoints = [];
+    multiAssign = { idx: 0, dir: 1, firstAssigned: false, waveTarget: 1, waveRemaining: 0 };
+    // Reset group state and pending attrs
+    groupRows = [];
+    groupType = null;
+    inGroup = false;
+    lastGroupEndLine = groupStartLine;
+    pendingAttrs = null;
+    return;
+  }
   const points = groupRows.map(r => new WkbGeomPoint(r.easting, r.northing, r.elevation, { name: r.name || null, fcode: r.code || null, code: r.code, ...(r.attrs||{}) }));
     if (groupType === 'linestring') {
       if (points.length >= 2) {
@@ -314,8 +377,53 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
       if (!row) continue;
       if (row.strategy) diagnostics.push({ line: i + 1, strategy: row.strategy });
       if (inGroup) {
-        // Collect for group, do not emit as point
-        groupRows.push(row);
+        // If multi-mode active, distribute into separate lines
+        if (multiMode && multiNumLines > 0) {
+          // initialize arrays if needed
+          if (!multiLinesPoints || multiLinesPoints.length === 0) {
+            multiLinesPoints = Array.from({ length: multiNumLines }, () => [] as any[]);
+            multiAssign = { idx: 0, dir: 1, firstAssigned: false, waveTarget: 1, waveRemaining: 0 };
+            // For wave mode, start with line 0 assigned first
+            if (multiMode === 'wave') {
+              multiAssign.waveTarget = 1;
+              multiAssign.waveRemaining = 0;
+            }
+          }
+          // Assignment logic
+          if (multiMode === 'saw') {
+            // Zigzag bounce between lines 0..n-1
+            multiLinesPoints[multiAssign.idx].push(row);
+            // advance
+            if (multiNumLines > 1) {
+              multiAssign.idx += multiAssign.dir;
+              if (multiAssign.idx >= multiNumLines) { multiAssign.idx = multiNumLines - 2; multiAssign.dir = -1; }
+              if (multiAssign.idx < 0) { multiAssign.idx = 1; multiAssign.dir = 1; }
+            }
+          } else if (multiMode === 'wave') {
+            // Wave pattern: alternates blocks between lines; for code explanation, use a simple strategy:
+            // Start: assign first point to line 0; then assign two points to line1, then two to line0, etc.
+            if (!multiAssign.firstAssigned) {
+              multiLinesPoints[0].push(row);
+              multiAssign.firstAssigned = true;
+              multiAssign.waveTarget = 1 % multiNumLines;
+              multiAssign.waveRemaining = 2; // next two to target
+            } else {
+              multiLinesPoints[multiAssign.waveTarget].push(row);
+              multiAssign.waveRemaining -= 1;
+              if (multiAssign.waveRemaining <= 0) {
+                // flip target to the other line (for multiNumLines==2 flip between 0 and 1)
+                if (multiNumLines === 2) multiAssign.waveTarget = multiAssign.waveTarget === 0 ? 1 : 0;
+                else multiAssign.waveTarget = (multiAssign.waveTarget + 1) % multiNumLines;
+                multiAssign.waveRemaining = 2;
+              }
+            }
+          }
+          // Also keep raw groupRows for backward compatibility
+          groupRows.push(row);
+        } else {
+          // Collect for group, do not emit as point
+          groupRows.push(row);
+        }
       } else {
   // Standalone point (attach meta) - store as (easting, northing)
   const p = new WkbGeomPoint(row.easting, row.northing, row.elevation, { name: row.name || null, fcode: row.code || null, code: row.code, ...(row.attrs||{}) });
@@ -324,67 +432,90 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
   pendingAttrs = null;
       }
     } else if (code === '09') {
-      // Group start/end
-      if (line.includes('91')) {
-        // Start of group
-        if (inGroup) {
-          // Nested group, flush previous
-          flushGroup();
+      // Normalize the suffix after '09' so we accept forms like '09', '09_72', '09 74', etc.
+      const rest = rawLine.replace(/^\s*09[_\s]*/, '').trim();
+      // Helper to detect tokens inside the rest
+      const hasToken = (tok: string) => new RegExp("\\b" + tok + "\\b").test(rest);
+
+      // Start of group (91)
+      // Also accept compact markers like '09_72' or '09 72' by inspecting the raw line directly
+      const compactMatch = rawLine.match(/^\s*09[_\s]?([0-9]{2})/);
+      if (compactMatch) {
+        const codeNum = parseInt(compactMatch[1], 10);
+        if (codeNum >= 72 && codeNum <= 79) {
+          multiMode = 'saw';
+          multiNumLines = Math.max(2, codeNum - 70);
+          multiLinesPoints = Array.from({ length: multiNumLines }, () => []);
+          multiAssign = { idx: 0, dir: 1, firstAssigned: false, waveTarget: 1, waveRemaining: 0 };
+          if (!inGroup) { inGroup = true; groupRows = []; groupType = null; groupStartLine = i; }
+          continue;
         }
+        if (codeNum >= 82 && codeNum <= 89) {
+          multiMode = 'wave';
+          multiNumLines = Math.max(2, codeNum - 80);
+          multiLinesPoints = Array.from({ length: multiNumLines }, () => []);
+          multiAssign = { idx: 0, dir: 1, firstAssigned: false, waveTarget: 1, waveRemaining: 0 };
+          if (!inGroup) { inGroup = true; groupRows = []; groupType = null; groupStartLine = i; }
+          continue;
+        }
+      }
+      if (hasToken('91')) {
+        if (inGroup) flushGroup();
         inGroup = true;
         groupRows = [];
         groupType = null;
         groupStartLine = i;
-        // Defensive: if line also contains 99 or 96, treat as malformed
-        if (line.includes('99')) {
-          warnings.push({ line: i + 1, message: `KOF line ${i + 1} has both 91 and 99, skipping group.`, code: '09' });
-          inGroup = false;
-          groupRows = [];
-          groupType = null;
-        } else if (line.includes('96')) {
-          warnings.push({ line: i + 1, message: `KOF line ${i + 1} has both 91 and 96, skipping group.`, code: '09' });
-          inGroup = false;
-          groupRows = [];
-          groupType = null;
+        // Defensive: if rest also contains 99 or 96, treat as malformed
+        if (hasToken('99') || hasToken('96')) {
+          warnings.push({ line: i + 1, message: `KOF line ${i + 1} has both 91 and 99/96, skipping group.`, code: '09' });
+          inGroup = false; groupRows = []; groupType = null;
         }
-      } else if (line.includes('99')) {
+        // done
+      } else if (hasToken('99')) {
         // End of linestring group
-          if (inGroup) {
-          groupType = 'linestring';
-          flushGroup();
-        } else {
-          warnings.push({ line: i + 1, message: `KOF line ${i + 1} has 99 but no open group.`, code: '09' });
-        }
-      } else if (line.includes('96')) {
+        if (inGroup) { groupType = 'linestring'; flushGroup(); }
+        else warnings.push({ line: i + 1, message: `KOF line ${i + 1} has 99 but no open group.`, code: '09' });
+      } else if (hasToken('96')) {
         // End of polygon group
-        if (inGroup) {
-          groupType = 'polygon';
-          flushGroup();
-        } else {
-          warnings.push({ line: i + 1, message: `KOF line ${i + 1} has 96 but no open group.`, code: '09' });
+        if (inGroup) { groupType = 'polygon'; flushGroup(); }
+        else warnings.push({ line: i + 1, message: `KOF line ${i + 1} has 96 but no open group.`, code: '09' });
+      } else if (/(7[2-9])/.test(rest)) {
+        // Saw/zigzag pattern detected (72..79)
+        const m = rest.match(/(7[2-9])/);
+        if (m) {
+          const codeNum = parseInt(m[1], 10);
+          multiMode = 'saw';
+          multiNumLines = Math.max(2, codeNum - 70);
+          multiLinesPoints = Array.from({ length: multiNumLines }, () => []);
+          multiAssign = { idx: 0, dir: 1, firstAssigned: false, waveTarget: 1, waveRemaining: 0 };
+          // Open a group so following 05 rows are collected
+          if (!inGroup) {
+            inGroup = true;
+            groupRows = [];
+            groupType = null;
+            groupStartLine = i;
+          }
+        }
+      } else if (/(8[2-9])/.test(rest)) {
+        // Wave pattern detected (82..89)
+        const m = rest.match(/(8[2-9])/);
+        if (m) {
+          const codeNum = parseInt(m[1], 10);
+          multiMode = 'wave';
+          multiNumLines = Math.max(2, codeNum - 80);
+          multiLinesPoints = Array.from({ length: multiNumLines }, () => []);
+          multiAssign = { idx: 0, dir: 1, firstAssigned: false, waveTarget: 1, waveRemaining: 0 };
+          // Open a group so following 05 rows are collected
+          if (!inGroup) {
+            inGroup = true;
+            groupRows = [];
+            groupType = null;
+            groupStartLine = i;
+          }
         }
       } else {
         warnings.push({ line: i + 1, message: `KOF line ${i + 1} has unknown 09 code.`, code: '09' });
       }
-    } else if (code === '11' || code === '12') {
-      // Attribute/annotation rows: attach to next geometry
-      // Improved parsing: support key="multi token value" and key='single quoted' as well as unquoted key=value
-  const remainder = rawLine.replace(/^\s*(11|12)\b\s*/, '').trim();
-      
-      const attrs: Record<string, any> = {};
-      // Matches: key="double quoted (allows escaped \" inside)" OR key='single quoted (allows escaped \\' inside)' OR key=unquoted
-      const attrRe = /([^\s=]+)=("((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\s]+))/g;
-      let m: RegExpExecArray | null;
-      while ((m = attrRe.exec(remainder)) !== null) {
-        const key = m[1];
-        let val = m[3] !== undefined ? m[3] : (m[4] !== undefined ? m[4] : m[5]);
-        // Unescape escaped quotes and backslashes inside quoted values (only after matching)
-        if (typeof val === 'string') {
-          val = val.replace(/\\(["'\\])/g, '$1');
-        }
-        attrs[key] = val;
-      }
-  if (Object.keys(attrs).length > 0) pendingAttrs = attrs; else pendingAttrs = { _raw: remainder.split(/\s+/) };
     } else {
       // Unknown or unsupported code
       warnings.push({ line: i + 1, message: `KOF line ${i + 1} has unknown code '${code}'.`, code });

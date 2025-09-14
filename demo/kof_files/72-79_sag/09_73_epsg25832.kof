@@ -1,0 +1,16 @@
+ 00 Codes 72 to 79 are multiline "saw" ("Sag") codes.
+ 00 Expected output:
+ 00 3 LineString features per block (saw).
+ 00 Points distribution: 05 rows are assigned round-robin to the 3 LineStrings; counts depend on number of 05 rows modulo 3.
+-05 PPPPPPPPPP KKKKKKKK XXXXXXXX.XXX YYYYYYY.YYY ZZZZ.ZZZ
+ 09_73
+ 05 3001       7301      6540300.000  314200.000    1.000
+ 05 3002       7302      6540300.000  314200.000    1.100
+ 05 3003       7303      6540300.000  314200.000    1.200
+ 05 3004       7301      6540301.000  314210.000    1.000
+ 05 3005       7302      6540301.000  314210.000    1.100
+ 05 3006       7303      6540301.000  314210.000    1.200
+ 05 3007       7301      6540302.000  314220.000    1.000
+ 05 3008       7302      6540302.000  314220.000    1.100
+ 05 3009       7303      6540302.000  314220.000    1.200
+ 09_99

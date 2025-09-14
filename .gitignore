@@ -15,7 +15,7 @@ test/geojson/*
 # OS files
 .DS_Store
 Thumbs.db
-
+test/geojson/
 # IDE/editor files
 .vscode/
 *.code-workspace
