@@ -1,0 +1,16 @@
+00 Codes 82 to 89 are multiline "wave" ("Bølge") codes.
+00 Expected output:
+00 4 LineString features per block (wave example with 4 lines).
+00 Points distribution: wave pattern alternates blocks between the 4 lines.
+00 Example wave order for 4 lines: 1,2,2,1,1,2,2,3,3,2...
+-05 PPPPPPPPPP KKKKKKKK XXXXXXXX.XXX YYYYYYY.YYY ZZZZ.ZZZ
+09_84
+05 6201       8401      6540801.000  314540.000    4.000
+05 6202       8402      6540801.000  314550.000    4.100
+05 6203       8402      6540802.000  314550.000    4.100
+05 6204       8402      6540802.000  314540.000    4.000
+05 6205       8402      6540803.000  314540.000    4.000
+05 6206       8402      6540803.000  314550.000    4.100
+05 6207       8402      6540804.000  314550.000    4.100
+05 6208       8402      6540804.000  314540.000    4.000
+09_99
