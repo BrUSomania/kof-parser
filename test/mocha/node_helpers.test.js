@@ -9,9 +9,14 @@ describe('Node helper static methods on KOF', function () {
     // fall back to the regular bundle used in tests.
     const nodePath = path.join(__dirname, '..', '..', 'dist', 'kof-parser.node.cjs.js');
     const fallback = path.join(__dirname, '..', '..', 'dist', 'kof-parser.cjs.js');
+    const nodeHelpers = path.join(__dirname, '..', '..', 'dist', 'nodeHelpers.js');
     if (fs.existsSync(nodePath)) nodeBundle = require(nodePath);
     else if (fs.existsSync(fallback)) nodeBundle = require(fallback);
-    else throw new Error('No bundle found in dist/ (expected one of kof-parser.node.cjs.js or kof-parser.cjs.js)');
+    else if (fs.existsSync(nodeHelpers)) {
+      // nodeHelpers.js is an ES module-like file compiled from TypeScript; try to require it
+      try { nodeBundle = require(nodeHelpers); } catch (e) { /* ignore */ }
+    }
+    else throw new Error('No bundle found in dist/ (expected kof-parser.node.cjs.js, kof-parser.cjs.js or nodeHelpers.js)');
   });
 
   it('exposes KOF on the bundle', function () {
@@ -21,9 +26,9 @@ describe('Node helper static methods on KOF', function () {
   it('attaches static helper methods to KOF', function () {
     const K = nodeBundle.KOF;
     // Helpers might be attached as static methods on KOF or exported at module root (nodeBundle).
-    const hasParseDirectory = (K && typeof K.parseDirectory === 'function') || (typeof nodeBundle.parseDirectory === 'function');
-    const hasParseMultipleFiles = (K && typeof K.parseMultipleFiles === 'function') || (typeof nodeBundle.parseMultipleFiles === 'function');
-    const hasShow = (K && typeof K.show === 'function') || (typeof nodeBundle.show === 'function');
+    const hasParseDirectory = (K && typeof K.parseDirectory === 'function') || (nodeBundle && typeof nodeBundle.parseDirectory === 'function');
+    const hasParseMultipleFiles = (K && typeof K.parseMultipleFiles === 'function') || (nodeBundle && typeof nodeBundle.parseMultipleFiles === 'function');
+    const hasShow = (K && typeof K.show === 'function') || (nodeBundle && typeof nodeBundle.show === 'function');
     assert.ok(hasParseDirectory, 'parseDirectory exists (on KOF or node bundle)');
     assert.ok(hasParseMultipleFiles, 'parseMultipleFiles exists (on KOF or node bundle)');
     assert.ok(hasShow, 'show exists (on KOF or node bundle)');
@@ -32,7 +37,7 @@ describe('Node helper static methods on KOF', function () {
   it('parseDirectory returns an array of KOF instances for demo/kof_files', function () {
   const K = nodeBundle.KOF;
   const runner = (K && typeof K.parseDirectory === 'function') ? K : nodeBundle;
-  const files = runner.parseDirectory(path.join(__dirname, '..', '..', 'demo', 'kof_files'), false);
+  const files = (runner && typeof runner.parseDirectory === 'function') ? runner.parseDirectory(path.join(__dirname, '..', '..', 'demo', 'kof_files'), false) : [];
     assert.ok(Array.isArray(files), 'returned an array');
     assert.ok(files.length > 0, 'found at least one demo kof file');
     const first = files[0];
@@ -47,7 +52,7 @@ describe('Node helper static methods on KOF', function () {
   const entries = require('fs').readdirSync(demoDir).filter(f => f.toLowerCase().endsWith('.kof'));
     assert.ok(entries.length > 0, 'demo files exist');
     const one = path.join(demoDir, entries[0]);
-    const arr = K.parseMultipleFiles([one]);
+    const arr = (K && typeof K.parseMultipleFiles === 'function') ? K.parseMultipleFiles([one]) : (nodeBundle && typeof nodeBundle.parseMultipleFiles === 'function' ? nodeBundle.parseMultipleFiles([one]) : []);
     assert.ok(Array.isArray(arr) && arr.length === 1, 'returned single-element array');
     const k = arr[0];
     assert.strictEqual(typeof k.fileName, 'string');
@@ -77,7 +82,7 @@ describe('Node helper static methods on KOF', function () {
   const demoDir = path.join(__dirname, '..', '..', 'demo', 'kof_files');
   const entries = require('fs').readdirSync(demoDir).filter(f => f.toLowerCase().endsWith('.kof'));
   const one = path.join(demoDir, entries[0]);
-  const k = runner.parseSingleFile(one);
+  const k = (runner && typeof runner.parseSingleFile === 'function') ? runner.parseSingleFile(one) : (nodeBundle && typeof nodeBundle.parseSingleFile === 'function' ? nodeBundle.parseSingleFile(one) : null);
     assert.ok(k && typeof k.fileName === 'string', 'returned a KOF instance');
     assert.ok(Array.isArray(k.warnings), 'instance has warnings array');
   });
