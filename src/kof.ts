@@ -310,6 +310,35 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
     if (!line) continue;
     if (line.startsWith('-')) { handleIgnoredLine(i); continue; }
     const code = line.substring(0, 2);
+    /*
+     KOF row code summary (00..99) - parser coverage notes
+
+     Implemented handlers (handled below):
+       05 - Observation/point rows (parsed by parseKOFRow and handled in handle05)
+       09 - Group/control wrapper rows (handle09) which recognizes embedded tokens like 91/99/96
+       10 - File-level metadata (handle10)
+       11 - Attribute lines attached to next geometry (handle11)
+       12 - File-level metadata (handle12)
+       20 - Measurement/attrs (handle20)
+       30 - Pending attributes (handle30)
+
+     Partial / notes:
+       72..79 - multi-line 'saw' (zig-zag) patterns: implemented when appearing as tokens inside a '09' line
+       82..89 - multi-line 'wave' patterns: implemented when appearing as tokens inside a '09' line
+       91     - group START token: recognized when embedded in a '09' line; standalone '91' now delegated to handle09
+       96     - polygon CLOSE token: recognized when embedded in a '09' line; standalone '96' now delegated to handle09
+       99     - group END token: recognized when embedded in a '09' line; standalone '99' now delegated to handle09
+
+     Not implemented (or unhandled directly by the parser):
+       00-04, 06-08, 13-19, 21-29, 31-69, 70-71, 80-81, 90, 92-95, 97-98
+
+     Notes and recommendations:
+     - Many codes are legacy or optional; implement on-demand as required by incoming datasets.
+     - The parser treats unknown two-character codes with a warning via handleUnknown. For robustness, prefer
+       adding dedicated handlers (small functions) for any code(s) you need to support.
+     - See repository file `test/mocha/logs/kof_code_status.json` and `kof_code_status.csv` for a per-code
+       matrix generated during development.
+    */
     switch (code) {
       case '10': handle10(rawLine); break;
       case '11': handle11(rawLine); break;
@@ -317,7 +346,14 @@ export function parseKOF(content: string, opts: ParseOptions = {}): ParseResult 
       case '20': handle20(rawLine, i); break;
       case '30': handle30(rawLine); break;
       case '05': handle05(rawLine, i); break;
+      // Group/control: support both '09' wrapper lines and standalone group codes
       case '09': handle09(rawLine, i); break;
+      case '91':
+      case '96':
+      case '99':
+        // Delegate to handle09 so standalone '91'/'96'/'99' lines behave like embedded tokens
+        try { handle09(rawLine.replace(/^\s*(91|96|99)[_\s]*/, '09 '), i); } catch (e) { handleUnknown(rawLine, i, code); }
+        break;
       default: handleUnknown(rawLine, i, code); break;
     }
   }
@@ -391,6 +427,8 @@ export class KOF {
     if ((res as any).metadata) Object.assign(this.metadata, (res as any).metadata);
     return res.geometries;
   }
+
+  // Note: Node-only helpers (parseMultipleFiles/parseDirectory/show) moved to src/nodeHelpers.ts
 
   toGeoJSON(opts?: { sourceCrs?: string | null, targetCrs?: string | null, crs?: { from?: string | null, to?: string | null } }) {
     const geoms = this.toWkbGeometries();
