@@ -4,7 +4,14 @@ const path = require('path');
 describe('Node helper static methods on KOF', function () {
   let nodeBundle;
   before(function () {
-    nodeBundle = require(path.join(__dirname, '..', '..', 'dist', 'kof-parser.node.cjs.js'));
+    const fs = require('fs');
+    // Try to load the Node-specific bundle; if it doesn't exist (CI build layouts may differ),
+    // fall back to the regular bundle used in tests.
+    const nodePath = path.join(__dirname, '..', '..', 'dist', 'kof-parser.node.cjs.js');
+    const fallback = path.join(__dirname, '..', '..', 'dist', 'kof-parser.cjs.js');
+    if (fs.existsSync(nodePath)) nodeBundle = require(nodePath);
+    else if (fs.existsSync(fallback)) nodeBundle = require(fallback);
+    else throw new Error('No bundle found in dist/ (expected one of kof-parser.node.cjs.js or kof-parser.cjs.js)');
   });
 
   it('exposes KOF on the bundle', function () {

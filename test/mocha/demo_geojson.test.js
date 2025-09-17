@@ -57,11 +57,17 @@ describe('demo KOF -> GeoJSON export', function() {
           return coords.map(transformCoords);
         };
         for (const f of gj4326.features) f.geometry.coordinates = transformCoords(f.geometry.coordinates);
-        outPath = path.join(outDir, file.replace(/epsg\d+/i, 'epsg4326').replace(/\.kof$/i, '.geojson'));
-        fs.writeFileSync(outPath, JSON.stringify(gj4326, null, 2), 'utf8');
+  outPath = path.join(outDir, file.replace(/epsg\d+/i, 'epsg4326').replace(/\.kof$/i, '.geojson'));
+  // ensure parent directories exist (demo files may be in subfolders)
+  const outDirParent = path.dirname(outPath);
+  if (!fs.existsSync(outDirParent)) fs.mkdirSync(outDirParent, { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(gj4326, null, 2), 'utf8');
       } else {
-        outPath = path.join(outDir, file.replace(/\.kof$/i, '.geojson'));
-        fs.writeFileSync(outPath, JSON.stringify(gj, null, 2), 'utf8');
+  outPath = path.join(outDir, file.replace(/\.kof$/i, '.geojson'));
+  // ensure parent directories exist (demo files may be in subfolders)
+  const outDirParent = path.dirname(outPath);
+  if (!fs.existsSync(outDirParent)) fs.mkdirSync(outDirParent, { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(gj, null, 2), 'utf8');
       }
       // quick read-back check
       const re = JSON.parse(fs.readFileSync(outPath, 'utf8'));
