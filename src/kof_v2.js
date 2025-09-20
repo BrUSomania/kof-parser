@@ -3,19 +3,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.KOF_V2 = void 0;
 var fs = require("fs");
 var path = require("path");
-// To run directly with Node.js for testing (from project root):
-// tsc .\src\kof_v2.ts; node .\src\kof_v2.js;
-// or
-// npx tsc .\src\kof_v2.ts;
-//
-// Create a basic class KOF_V2 with a constructor that takes a version number and a method to display the version.
-// Create one static property to hold the default version.
-var KOF_V2 = exports.KOF_V2 = /** @class */ (function () {
+var epsgDefs = require("@data/epsg/epsg_list.json");
+var KOF_V2 = /** @class */ (function () {
     // Constructor - PRIVATE: enforce creating instances via static factory methods
     function KOF_V2(filePath, _key) {
         this._kofType = null;
-        this._sourceEpsg = null;
+        this._sourceEpsg = null; // Default to UTM32 / ETRS89
         this._targetEpsg = null;
+        this._sourceEpsgDescription = null;
+        this._targetEpsgDescription = null;
         if (_key !== KOF_V2._ctorKey)
             throw new Error('KOF_V2: use static factory methods to create instances');
         this._filePath = filePath;
@@ -25,7 +21,6 @@ var KOF_V2 = exports.KOF_V2 = /** @class */ (function () {
         this._kofType = null;
         this._sourceEpsg = null;
         this._targetEpsg = null;
-        KOF_V2.validateKofContent(this._fileContent);
         this._metadata = {
             fileName: path.basename(filePath),
             fileExtension: path.extname(filePath),
@@ -39,9 +34,32 @@ var KOF_V2 = exports.KOF_V2 = /** @class */ (function () {
             numberOfLinePoints: 0,
             numberOfPolygons: 0,
             numberOfPolygonPoints: 0,
+            numberOfSosiCodes: 0,
         };
     }
-    // Instance methods
+    // Class instance methods
+    KOF_V2.prototype._isEpsgValid = function (epsg, isSource) {
+        if (isSource === void 0) { isSource = true; }
+        if (!epsg)
+            return false;
+        if (!/^EPSG:\d{3,5}$/i.test(epsg))
+            return false;
+        if (!epsgDefs[epsg.toUpperCase()])
+            return false;
+        return true;
+    };
+    KOF_V2.prototype.setSourceCrs = function (epsg) {
+        if (!this._isEpsgValid(epsg))
+            throw new Error("Invalid EPSG code");
+        this._sourceEpsg = epsg ? epsg.toUpperCase() : null;
+        this._sourceEpsgDescription = this._sourceEpsg && epsgDefs[this._sourceEpsg] ? epsgDefs[this._sourceEpsg] : null;
+    };
+    KOF_V2.prototype.setTargetCrs = function (epsg) {
+        if (!this._isEpsgValid(epsg))
+            throw new Error("Invalid EPSG code");
+        this._targetEpsg = epsg ? epsg.toUpperCase() : null;
+        this._targetEpsgDescription = this._targetEpsg && epsgDefs[this._targetEpsg] ? epsgDefs[this._targetEpsg] : null;
+    };
     KOF_V2.prototype.printFileVersion = function () {
         return "KOF_V2 Version: ".concat(this._fileVersion);
     };
@@ -188,6 +206,7 @@ var KOF_V2 = exports.KOF_V2 = /** @class */ (function () {
     KOF_V2._ctorKey = Symbol('KOF_V2_ctor');
     return KOF_V2;
 }());
+exports.KOF_V2 = KOF_V2;
 { // Only run this when we run the file directly with Node.js for testing
     if (require.main === module) {
         // Example usage:
@@ -198,32 +217,31 @@ var KOF_V2 = exports.KOF_V2 = /** @class */ (function () {
         // Log to terminal
         console.log(KOF_V2.displayClassVersion());
         console.log(kofPolygonsInstance.printFileVersion());
-        console.log(kofPolygonsInstance.printMetadata());
-        console.log(kofPolygonsInstance.printContent());
-        // Multiple files
-        var kofMultipleInstances = KOF_V2.read([kofPointsFilePath, kofPolygonsFilePath]);
-        kofMultipleInstances.forEach(function (instance, index) {
-            console.log("\n--- File ".concat(index + 1, " ---"));
-            console.log(instance.printFileVersion());
-            console.log(instance.printMetadata());
-            console.log(instance.printContent());
-        });
-        // Read folder
-        var kofFolderPath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files';
-        var kofFolderInstances = KOF_V2.read(kofFolderPath, false);
-        kofFolderInstances.forEach(function (instance, index) {
-            console.log("\n--- Folder File ".concat(index + 1, " ---"));
-            console.log(instance.printFileVersion());
-            console.log(instance.printMetadata());
-            console.log(instance.printContent());
-        });
-        // Try creating KOF instance as "new KOF_V2()" - should fail
-        try {
-            // @ts-ignore
-            var invalidInstance = new KOF_V2(kofPointsFilePath);
-        }
-        catch (error) {
-            console.error("Error creating KOF_V2 instance directly:", error.message);
-        }
+        // console.log(kofPolygonsInstance.printMetadata());
+        // console.log(kofPolygonsInstance.printContent());
+        // // Multiple files
+        // const kofMultipleInstances = KOF_V2.read([kofPointsFilePath, kofPolygonsFilePath]);
+        // kofMultipleInstances.forEach((instance, index) => {
+        //     console.log(`\n--- File ${index + 1} ---`);
+        //     console.log(instance.printFileVersion());
+        //     console.log(instance.printMetadata());
+        //     console.log(instance.printContent());
+        // });
+        // // Read folder
+        // const kofFolderPath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files';
+        // const kofFolderInstances = KOF_V2.read(kofFolderPath, false);
+        // kofFolderInstances.forEach((instance, index) => {
+        //     console.log(`\n--- Folder File ${index + 1} ---`);
+        //     console.log(instance.printFileVersion());
+        //     console.log(instance.printMetadata());
+        //     console.log(instance.printContent());
+        // });
+        // // Try creating KOF instance as "new KOF_V2()" - should fail
+        // try {
+        //     // @ts-ignore
+        //     const invalidInstance = new KOF_V2(kofPointsFilePath);
+        // } catch (error) {
+        //     console.error("Error creating KOF_V2 instance directly:", (error as Error).message);
+        // }
     }
 }

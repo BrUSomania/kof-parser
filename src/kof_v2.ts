@@ -1,13 +1,33 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as epsgDefs from './data/epsg/epsg_list.json';
+import * as csysDescriptions from './data/epsg/epsg_vs_csysDescription.json';
 
 // To run directly with Node.js for testing (from project root):
-// tsc .\src\kof_v2.ts; node .\src\kof_v2.js;
+// npx tsc --project .\tsconfig.json; node .\dist\kof_v2.js;
 // or
-// npx tsc .\src\kof_v2.ts;
+// tsc .\src\kof_v2.ts; node .\src\kof_v2.js;
 //
 // Create a basic class KOF_V2 with a constructor that takes a version number and a method to display the version.
 // Create one static property to hold the default version.
+
+type KofMetadata = {
+    fileName: string;
+    fileExtension: string;
+    fileSize: number;
+    sosiCodes: Set<string>;
+    fileSizeUnit: string;
+    fileType: string;
+    numberOfLines: number;
+    numberOfPoints: number;
+    numberOfLineStrings: number;
+    numberOfLinePoints: number;
+    numberOfPolygons: number;
+    numberOfPolygonPoints: number;
+    numberOfSosiCodes: number;
+};
+type EpsgCode = keyof typeof epsgDefs | null;
+
 export class KOF_V2 {
     // Instance properties
     _filePath: string;
@@ -15,9 +35,11 @@ export class KOF_V2 {
     _header: string;
     _fileContent: string[];
     _kofType: "coordinates" | "measurements" | null = null;
-    _sourceEpsg: string | null = null;
-    _targetEpsg: string | null = null;
-    _metadata: Record<string, any>;
+    _sourceEpsg: EpsgCode = null; // Default to UTM32 / ETRS89
+    _targetEpsg: EpsgCode = null;
+    _sourceEpsgDescription: string | null = null;
+    _targetEpsgDescription: string | null = null;
+    _metadata: KofMetadata;
 
     // Static properties
     static _classVersion: string = "0.0.1";
@@ -48,10 +70,37 @@ export class KOF_V2 {
             numberOfLinePoints: 0,
             numberOfPolygons: 0,
             numberOfPolygonPoints: 0,
+            numberOfSosiCodes: 0,
         };
     }
 
-    // Instance methods
+    // Class instance methods
+    _isEpsgValid(epsg: string | null, isSource: boolean = true): boolean {
+        if (!epsg) return false;
+        if (!/^EPSG:\d{3,5}$/i.test(epsg)) return false;
+        if (!(epsgDefs as any)[epsg.toUpperCase()]) return false;
+        return true;
+    }
+
+    _isCsysDescriptionAvailable(epsg: string | null): boolean {
+        if (!epsg) return false;
+        return (csysDescriptions as any)[epsg.toUpperCase()] ? true : false;
+    }
+    
+    setSourceCrs(epsg: string | null): void {
+        if (!this._isEpsgValid(epsg)) throw new Error("Invalid EPSG code");
+        this._sourceEpsg = epsg ? (epsg.toUpperCase() as keyof typeof epsgDefs) : null;
+        if (!this._isCsysDescriptionAvailable(this._sourceEpsg)) throw new Error("No coordinate system description available for EPSG code");
+        this._sourceEpsgDescription = this._sourceEpsg && (epsgDefs as any)[this._sourceEpsg] ? (epsgDefs as any)[this._sourceEpsg] : null;
+    }
+
+    setTargetCrs(epsg: string | null): void {
+        if (!this._isEpsgValid(epsg)) throw new Error("Invalid EPSG code");
+        this._targetEpsg = epsg ? (epsg.toUpperCase() as keyof typeof epsgDefs) : null;
+        if (!this._isCsysDescriptionAvailable(this._targetEpsg)) throw new Error("No coordinate system description available for EPSG code");
+        this._targetEpsgDescription = this._targetEpsg && (epsgDefs as any)[this._targetEpsg] ? (epsgDefs as any)[this._targetEpsg] : null;
+    }
+
     printFileVersion(): string {
         return `KOF_V2 Version: ${this._fileVersion}`;
     }
@@ -206,34 +255,34 @@ export class KOF_V2 {
         // Log to terminal
         console.log(KOF_V2.displayClassVersion());
         console.log(kofPolygonsInstance.printFileVersion());
-        console.log(kofPolygonsInstance.printMetadata());
-        console.log(kofPolygonsInstance.printContent());
+        // console.log(kofPolygonsInstance.printMetadata());
+        // console.log(kofPolygonsInstance.printContent());
 
-        // Multiple files
-        const kofMultipleInstances = KOF_V2.read([kofPointsFilePath, kofPolygonsFilePath]);
-        kofMultipleInstances.forEach((instance, index) => {
-            console.log(`\n--- File ${index + 1} ---`);
-            console.log(instance.printFileVersion());
-            console.log(instance.printMetadata());
-            console.log(instance.printContent());
-        });
+        // // Multiple files
+        // const kofMultipleInstances = KOF_V2.read([kofPointsFilePath, kofPolygonsFilePath]);
+        // kofMultipleInstances.forEach((instance, index) => {
+        //     console.log(`\n--- File ${index + 1} ---`);
+        //     console.log(instance.printFileVersion());
+        //     console.log(instance.printMetadata());
+        //     console.log(instance.printContent());
+        // });
 
-        // Read folder
-        const kofFolderPath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files';
-        const kofFolderInstances = KOF_V2.read(kofFolderPath, false);
-        kofFolderInstances.forEach((instance, index) => {
-            console.log(`\n--- Folder File ${index + 1} ---`);
-            console.log(instance.printFileVersion());
-            console.log(instance.printMetadata());
-            console.log(instance.printContent());
-        });
+        // // Read folder
+        // const kofFolderPath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files';
+        // const kofFolderInstances = KOF_V2.read(kofFolderPath, false);
+        // kofFolderInstances.forEach((instance, index) => {
+        //     console.log(`\n--- Folder File ${index + 1} ---`);
+        //     console.log(instance.printFileVersion());
+        //     console.log(instance.printMetadata());
+        //     console.log(instance.printContent());
+        // });
 
-        // Try creating KOF instance as "new KOF_V2()" - should fail
-        try {
-            // @ts-ignore
-            const invalidInstance = new KOF_V2(kofPointsFilePath);
-        } catch (error) {
-            console.error("Error creating KOF_V2 instance directly:", (error as Error).message);
-        }
+        // // Try creating KOF instance as "new KOF_V2()" - should fail
+        // try {
+        //     // @ts-ignore
+        //     const invalidInstance = new KOF_V2(kofPointsFilePath);
+        // } catch (error) {
+        //     console.error("Error creating KOF_V2 instance directly:", (error as Error).message);
+        // }
     }
 }
