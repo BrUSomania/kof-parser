@@ -248,10 +248,10 @@ export class KOF_V2 {
 { // Only run this when we run the file directly with Node.js for testing
     if (require.main === module) {
         // Example usage:
-        const kofPointsFilePath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files\\01-03_points_multiple_utm32_epsg25832.kof';
-        const kofPolygonsFilePath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files\\03-02_polygon_single_utm32_epsg25832_with_header.kof';
+        const kofPointsFilePath = './src/demo/kof_files/01-03_points_multiple_utm32_epsg25832.kof';
+        const kofPolygonsFilePath = './src/demo/kof_files/03-02_polygon_single_utm32_epsg25832_with_header.kof';
         const kofPolygonsInstance = KOF_V2.read(kofPolygonsFilePath)[0];
-        const kofMixedPath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files\\04_mixed_multiple_utm32_epsg25832.kof';
+        const kofMixedPath = './src/demo/kof_files/04_mixed_multiple_utm32_epsg25832.kof';
         // Log to terminal
         console.log(KOF_V2.displayClassVersion());
         console.log(kofPolygonsInstance.printFileVersion());
@@ -268,7 +268,7 @@ export class KOF_V2 {
         // });
 
         // // Read folder
-        // const kofFolderPath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files';
+        // const kofFolderPath = './src/demo/kof_files';
         // const kofFolderInstances = KOF_V2.read(kofFolderPath, false);
         // kofFolderInstances.forEach((instance, index) => {
         //     console.log(`\n--- Folder File ${index + 1} ---`);

@@ -1,4 +1,4 @@
-import { kof } from '../src/kof';
+import { kof } from '../kof';
 import fs from 'fs';
 
 const kofFile = fs.readFileSync('./demo/kof_files/sample.kof', 'utf-8');

@@ -3,8 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.KOF_V2 = void 0;
 var fs = require("fs");
 var path = require("path");
-var epsgDefs = require("@data/epsg/epsg_list.json");
-var KOF_V2 = /** @class */ (function () {
+var epsgDefs = require("./data/epsg/epsg_list.json");
+var csysDescriptions = require("./data/epsg/epsg_vs_csysDescription.json");
+var KOF_V2 = exports.KOF_V2 = /** @class */ (function () {
     // Constructor - PRIVATE: enforce creating instances via static factory methods
     function KOF_V2(filePath, _key) {
         this._kofType = null;
@@ -48,16 +49,25 @@ var KOF_V2 = /** @class */ (function () {
             return false;
         return true;
     };
+    KOF_V2.prototype._isCsysDescriptionAvailable = function (epsg) {
+        if (!epsg)
+            return false;
+        return csysDescriptions[epsg.toUpperCase()] ? true : false;
+    };
     KOF_V2.prototype.setSourceCrs = function (epsg) {
         if (!this._isEpsgValid(epsg))
             throw new Error("Invalid EPSG code");
         this._sourceEpsg = epsg ? epsg.toUpperCase() : null;
+        if (!this._isCsysDescriptionAvailable(this._sourceEpsg))
+            throw new Error("No coordinate system description available for EPSG code");
         this._sourceEpsgDescription = this._sourceEpsg && epsgDefs[this._sourceEpsg] ? epsgDefs[this._sourceEpsg] : null;
     };
     KOF_V2.prototype.setTargetCrs = function (epsg) {
         if (!this._isEpsgValid(epsg))
             throw new Error("Invalid EPSG code");
         this._targetEpsg = epsg ? epsg.toUpperCase() : null;
+        if (!this._isCsysDescriptionAvailable(this._targetEpsg))
+            throw new Error("No coordinate system description available for EPSG code");
         this._targetEpsgDescription = this._targetEpsg && epsgDefs[this._targetEpsg] ? epsgDefs[this._targetEpsg] : null;
     };
     KOF_V2.prototype.printFileVersion = function () {
@@ -206,42 +216,42 @@ var KOF_V2 = /** @class */ (function () {
     KOF_V2._ctorKey = Symbol('KOF_V2_ctor');
     return KOF_V2;
 }());
-exports.KOF_V2 = KOF_V2;
 { // Only run this when we run the file directly with Node.js for testing
     if (require.main === module) {
         // Example usage:
-        var kofPointsFilePath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files\\01-03_points_multiple_utm32_epsg25832.kof';
-        var kofPolygonsFilePath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files\\03-02_polygon_single_utm32_epsg25832_with_header.kof';
+        var kofPointsFilePath = './src/demo/kof_files/01-03_points_multiple_utm32_epsg25832.kof';
+        var kofPolygonsFilePath = './src/demo/kof_files/03-02_polygon_single_utm32_epsg25832_with_header.kof';
         var kofPolygonsInstance = KOF_V2.read(kofPolygonsFilePath)[0];
-        var kofMixedPath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files\\04_mixed_multiple_utm32_epsg25832.kof';
+        var kofMixedPath = './src/demo/kof_files/04_mixed_multiple_utm32_epsg25832.kof';
         // Log to terminal
         console.log(KOF_V2.displayClassVersion());
         console.log(kofPolygonsInstance.printFileVersion());
         // console.log(kofPolygonsInstance.printMetadata());
         // console.log(kofPolygonsInstance.printContent());
-        // // Multiple files
-        // const kofMultipleInstances = KOF_V2.read([kofPointsFilePath, kofPolygonsFilePath]);
-        // kofMultipleInstances.forEach((instance, index) => {
-        //     console.log(`\n--- File ${index + 1} ---`);
-        //     console.log(instance.printFileVersion());
-        //     console.log(instance.printMetadata());
-        //     console.log(instance.printContent());
-        // });
-        // // Read folder
-        // const kofFolderPath = 'C:\\VisualStudioCode\\JavaScript\\kof-parser\\demo\\kof_files';
-        // const kofFolderInstances = KOF_V2.read(kofFolderPath, false);
-        // kofFolderInstances.forEach((instance, index) => {
-        //     console.log(`\n--- Folder File ${index + 1} ---`);
-        //     console.log(instance.printFileVersion());
-        //     console.log(instance.printMetadata());
-        //     console.log(instance.printContent());
-        // });
-        // // Try creating KOF instance as "new KOF_V2()" - should fail
-        // try {
-        //     // @ts-ignore
-        //     const invalidInstance = new KOF_V2(kofPointsFilePath);
-        // } catch (error) {
-        //     console.error("Error creating KOF_V2 instance directly:", (error as Error).message);
-        // }
+        // Multiple files
+        var kofMultipleInstances = KOF_V2.read([kofPointsFilePath, kofPolygonsFilePath]);
+        kofMultipleInstances.forEach(function (instance, index) {
+            console.log("\n--- File ".concat(index + 1, " ---"));
+            console.log(instance.printFileVersion());
+            console.log(instance.printMetadata());
+            console.log(instance.printContent());
+        });
+        // Read folder
+        var kofFolderPath = './src/demo/kof_files';
+        var kofFolderInstances = KOF_V2.read(kofFolderPath, false);
+        kofFolderInstances.forEach(function (instance, index) {
+            console.log("\n--- Folder File ".concat(index + 1, " ---"));
+            console.log(instance.printFileVersion());
+            console.log(instance.printMetadata());
+            console.log(instance.printContent());
+        });
+        // Try creating KOF instance as "new KOF_V2()" - should fail
+        try {
+            // @ts-ignore
+            var invalidInstance = new KOF_V2(kofPointsFilePath);
+        }
+        catch (error) {
+            console.error("Error creating KOF_V2 instance directly:", error.message);
+        }
     }
 }
