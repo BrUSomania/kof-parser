@@ -18,7 +18,7 @@ type KofMetadata = {
     sosiCodes: Set<string>;
     fileSizeUnit: string;
     fileType: string;
-    numberOfLines: number;
+    numberOfFileLines: number;
     numberOfPoints: number;
     numberOfLineStrings: number;
     numberOfLinePoints: number;
@@ -64,7 +64,7 @@ export class KOF_V2 {
             sosiCodes: KOF_V2.getSosiCodesSet(this._fileContent),
             fileSizeUnit: "bytes",
             fileType: "KOF",
-            numberOfLines: this._fileContent.length,
+            numberOfFileLines: this._fileContent.length,
             numberOfPoints: 0,
             numberOfLineStrings: 0,
             numberOfLinePoints: 0,
