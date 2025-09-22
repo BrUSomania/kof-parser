@@ -11,6 +11,62 @@ import * as csysDescriptions from './data/epsg/epsg_vs_csysDescription.json';
 // Create a basic class KOF_V2 with a constructor that takes a version number and a method to display the version.
 // Create one static property to hold the default version.
 
+type KofCodeDefinition = {
+    lineFormat: string;
+    description: string;
+}
+// A basic set of valid KOF line codes for demonstration purposes.
+const kofCodes = new Map<string, KofCodeDefinition>([
+    // Basic record types
+    ["00", { lineFormat: "^ I2 ^ A64", description: "Comment block" }],  // the line format means: I2 = integer 2 chars, A64 = alphanumeric 64 chars
+    ["01", { lineFormat: "^ I2 ^ A12 ^ I8 ^ I3 ^ I7 ^ I4 ^ A12 ^ A12", description: "Administrative block" }],  // 01 Mission, Date, Version number, Coordinate system, Municipality number, Units and Observer.
+    ["02", { lineFormat: "", description: "Station block" }],  // 02 Stasjon: [Stasjonsnavn] [Høydegrunnlag] [Høydegrunnlagstype] [Høydegrunnlagår] [Geoidemodell] [Geoidemodellår]
+    ["03", { lineFormat: "", description: "Unknown block" }],
+    ["04", { lineFormat: "", description: "Unknown block" }],
+    ["05", { lineFormat: "^ I2 ^ A10 ^ A8 ^ F12.3 ^ F11.3 ^ F8.3 ^ I2 ^ A7", description: "Coordinates block" }],
+    ["06", { lineFormat: "", description: "Unknown block" }],
+    ["07", { lineFormat: "", description: "Unknown block" }],
+    ["08", { lineFormat: "", description: "Unknown block" }],
+    ["09", { lineFormat: "", description: "Unknown block" }],
+    ["10", { lineFormat: "", description: "Unknown block" }],
+    ["11", { lineFormat: "", description: "Unknown block" }],
+    ["12", { lineFormat: "", description: "Unknown block" }],
+    ["13", { lineFormat: "", description: "Unknown block" }],
+    ["14", { lineFormat: "", description: "Unknown block" }],
+    ["15", { lineFormat: "", description: "Unknown block" }],
+    ["16", { lineFormat: "", description: "Unknown block" }],
+    ["17", { lineFormat: "", description: "Unknown block" }],
+    ["18", { lineFormat: "", description: "Unknown block" }],
+    ["19", { lineFormat: "", description: "Unknown block" }],
+    ["20", { lineFormat: "", description: "Unknown block" }],
+    // Multiline saw method records (09_71 .. 09_79)
+    ["09_72", { lineFormat: "", description: "Start multiline 2 - saw method" }],
+    ["09_73", { lineFormat: "", description: "Start multiline 3 - saw method" }],
+    ["09_74", { lineFormat: "", description: "Start multiline 4 - saw method" }],
+    ["09_75", { lineFormat: "", description: "Start multiline 5 - saw method" }],
+    ["09_76", { lineFormat: "", description: "Start multiline 6 - saw method" }],
+    ["09_77", { lineFormat: "", description: "Start multiline 7 - saw method" }],
+    ["09_78", { lineFormat: "", description: "Start multiline 8 - saw method" }],
+    ["09_79", { lineFormat: "", description: "Start multiline 9 - saw method" }],
+    // Multiline wave method records (09_81 .. 09_89)
+    ["09_82", { lineFormat: "", description: "Start multiline 2 - wave method" }],
+    ["09_83", { lineFormat: "", description: "Start multiline 3 - wave method" }],
+    ["09_84", { lineFormat: "", description: "Start multiline 4 - wave method" }],
+    ["09_85", { lineFormat: "", description: "Start multiline 5 - wave method" }],
+    ["09_86", { lineFormat: "", description: "Start multiline 6 - wave method" }],
+    ["09_87", { lineFormat: "", description: "Start multiline 7 - wave method" }],
+    ["09_88", { lineFormat: "", description: "Start multiline 8 - wave method" }],
+    ["09_89", { lineFormat: "", description: "Start multiline 9 - wave method" }],
+    // Other 09_xx records
+    ["09_90", { lineFormat: "", description: "Multiple lines/polygons start" }],
+    ["09_91", { lineFormat: "", description: "Single line start" }],
+    ["09_92", { lineFormat: "", description: "Start single line spline" }],
+    ["09_93", { lineFormat: "", description: "Start single line circle" }],
+    ["09_94", { lineFormat: "", description: "Start pointcloud" }],
+    ["09_96", { lineFormat: "", description: "Close line; line becomes polygon" }],
+    ["09_99", { lineFormat: "", description: "End of line(s)" }],
+]);
+    
 type KofMetadata = {
     fileName: string;
     fileExtension: string;
@@ -19,12 +75,10 @@ type KofMetadata = {
     fileSizeUnit: string;
     fileType: string;
     numberOfFileLines: number;
-    numberOfPoints: number;
-    numberOfLineStrings: number;
-    numberOfLinePoints: number;
-    numberOfPolygons: number;
-    numberOfPolygonPoints: number;
     numberOfSosiCodes: number;
+    geomCounts: { points: number; lineStrings: number; linePoints: number; polygons: number; polygonPoints: number; };
+    // Fill with keys from kofCodes map, counts set to 0 initially
+    kofCodeCounts: { [key: string]: number };
 };
 type EpsgCode = keyof typeof epsgDefs | null;
 
@@ -61,16 +115,19 @@ export class KOF_V2 {
             fileName: path.basename(filePath),
             fileExtension: path.extname(filePath),
             fileSize: fs.statSync(filePath).size,
-            sosiCodes: KOF_V2.getSosiCodesSet(this._fileContent),
             fileSizeUnit: "bytes",
             fileType: "KOF",
+            sosiCodes: KOF_V2.getSosiCodesSet(this._fileContent),
             numberOfFileLines: this._fileContent.length,
-            numberOfPoints: 0,
-            numberOfLineStrings: 0,
-            numberOfLinePoints: 0,
-            numberOfPolygons: 0,
-            numberOfPolygonPoints: 0,
-            numberOfSosiCodes: 0,
+            numberOfSosiCodes: KOF_V2.getSosiCodesSet(this._fileContent).size,
+            geomCounts: {
+                points: 0,
+                lineStrings: 0,
+                linePoints: 0,
+                polygons: 0,
+                polygonPoints: 0,
+            },
+            kofCodeCounts: Object.fromEntries(Array.from(kofCodes.keys()).map(k => [k, 0])),
         };
     }
 
@@ -255,8 +312,8 @@ export class KOF_V2 {
         // Log to terminal
         console.log(KOF_V2.displayClassVersion());
         console.log(kofPolygonsInstance.printFileVersion());
-        // console.log(kofPolygonsInstance.printMetadata());
-        // console.log(kofPolygonsInstance.printContent());
+        console.log(kofPolygonsInstance.printMetadata());
+        console.log(kofPolygonsInstance.printContent());
 
         // // Multiple files
         // const kofMultipleInstances = KOF_V2.read([kofPointsFilePath, kofPolygonsFilePath]);
