@@ -15,57 +15,71 @@ type KofCodeDefinition = {
     lineFormat: string;
     description: string;
 }
-// A basic set of valid KOF line codes for demonstration purposes.
+// A set of KOF line codes and short format/descriptions taken from the
+// KOF_format_dokumentasjon.pdf. Some formats are approximate and intended
+// as guidance for parsing/validation; they can be tightened later.
 const kofCodes = new Map<string, KofCodeDefinition>([
     // Basic record types
-    ["00", { lineFormat: "^ I2 ^ A64", description: "Comment block" }],  // the line format means: I2 = integer 2 chars, A64 = alphanumeric 64 chars
-    ["01", { lineFormat: "^ I2 ^ A12 ^ I8 ^ I3 ^ I7 ^ I4 ^ A12 ^ A12", description: "Administrative block" }],  // 01 Mission, Date, Version number, Coordinate system, Municipality number, Units and Observer.
-    ["02", { lineFormat: "", description: "Station block" }],  // 02 Stasjon: [Stasjonsnavn] [Høydegrunnlag] [Høydegrunnlagstype] [Høydegrunnlagår] [Geoidemodell] [Geoidemodellår]
-    ["03", { lineFormat: "", description: "Unknown block" }],
-    ["04", { lineFormat: "", description: "Unknown block" }],
-    ["05", { lineFormat: "^ I2 ^ A10 ^ A8 ^ F12.3 ^ F11.3 ^ F8.3 ^ I2 ^ A7", description: "Coordinates block" }],
-    ["06", { lineFormat: "", description: "Unknown block" }],
-    ["07", { lineFormat: "", description: "Unknown block" }],
-    ["08", { lineFormat: "", description: "Unknown block" }],
-    ["09", { lineFormat: "", description: "Unknown block" }],
-    ["10", { lineFormat: "", description: "Unknown block" }],
-    ["11", { lineFormat: "", description: "Unknown block" }],
-    ["12", { lineFormat: "", description: "Unknown block" }],
-    ["13", { lineFormat: "", description: "Unknown block" }],
-    ["14", { lineFormat: "", description: "Unknown block" }],
-    ["15", { lineFormat: "", description: "Unknown block" }],
-    ["16", { lineFormat: "", description: "Unknown block" }],
-    ["17", { lineFormat: "", description: "Unknown block" }],
-    ["18", { lineFormat: "", description: "Unknown block" }],
-    ["19", { lineFormat: "", description: "Unknown block" }],
-    ["20", { lineFormat: "", description: "Unknown block" }],
-    // Multiline saw method records (09_71 .. 09_79)
-    ["09_72", { lineFormat: "", description: "Start multiline 2 - saw method" }],
-    ["09_73", { lineFormat: "", description: "Start multiline 3 - saw method" }],
-    ["09_74", { lineFormat: "", description: "Start multiline 4 - saw method" }],
-    ["09_75", { lineFormat: "", description: "Start multiline 5 - saw method" }],
-    ["09_76", { lineFormat: "", description: "Start multiline 6 - saw method" }],
-    ["09_77", { lineFormat: "", description: "Start multiline 7 - saw method" }],
-    ["09_78", { lineFormat: "", description: "Start multiline 8 - saw method" }],
-    ["09_79", { lineFormat: "", description: "Start multiline 9 - saw method" }],
-    // Multiline wave method records (09_81 .. 09_89)
-    ["09_82", { lineFormat: "", description: "Start multiline 2 - wave method" }],
-    ["09_83", { lineFormat: "", description: "Start multiline 3 - wave method" }],
-    ["09_84", { lineFormat: "", description: "Start multiline 4 - wave method" }],
-    ["09_85", { lineFormat: "", description: "Start multiline 5 - wave method" }],
-    ["09_86", { lineFormat: "", description: "Start multiline 6 - wave method" }],
-    ["09_87", { lineFormat: "", description: "Start multiline 7 - wave method" }],
-    ["09_88", { lineFormat: "", description: "Start multiline 8 - wave method" }],
-    ["09_89", { lineFormat: "", description: "Start multiline 9 - wave method" }],
-    // Other 09_xx records
-    ["09_90", { lineFormat: "", description: "Multiple lines/polygons start" }],
-    ["09_91", { lineFormat: "", description: "Single line start" }],
-    ["09_92", { lineFormat: "", description: "Start single line spline" }],
-    ["09_93", { lineFormat: "", description: "Start single line circle" }],
-    ["09_94", { lineFormat: "", description: "Start pointcloud" }],
-    ["09_96", { lineFormat: "", description: "Close line; line becomes polygon" }],
-    ["09_99", { lineFormat: "", description: "End of line(s)" }],
+    ["00", { lineFormat: "^ I2 ^ A64", description: "Comment / free text block" }],
+    ["01", { lineFormat: "^ I2 ^ A12 ^ I8 ^ I3 ^ I7 ^ I4 ^ A12 ^ A12", description: "Administrative header: mission, date, version, coordinate system, municipality, units, observer" }],
+    ["02", { lineFormat: "^ I2 ^ A20 ^ A10", description: "Station definition: station name, height reference, optional metadata" }],
+    ["03", { lineFormat: "^ I2 ^ A20", description: "Point description / attribute block" }],
+    ["04", { lineFormat: "^ I2 ^ A20", description: "Measurement metadata / instrument info" }],
+    ["05", { lineFormat: "^ I2 ^ A10 ^ A8 ^ F12.3 ^ F11.3 ^ F8.3 ^ I2 ^ A7", description: "Coordinate observation: row code, point name, point code, northing/lat, easting/lon, elevation, quality, attributes" }],
+    ["06", { lineFormat: "^ I2 ^ A20", description: "Height observation / leveling" }],
+    ["07", { lineFormat: "^ I2 ^ A20", description: "Description / comment for previous record" }],
+    ["08", { lineFormat: "^ I2 ^ A20", description: "Auxiliary data / instrument settings" }],
+    ["09", { lineFormat: "^ I2(,A2)?", description: "Composite/group record marker with optional subtype (see 09_xx entries)" }],
+    ["10", { lineFormat: "^ I2 ^ A.*", description: "Generic metadata or reserved record" }],
+    ["11", { lineFormat: "^ I2 ^ A40   ^ A6      ^ A4   ^ A10    ^ A6      ^ A2 ", description: "TELE INKA ADM DATA" }],
+    ["12", { lineFormat: "^ I2 ^ A70", description: "TELE EGENSKAPER" }],
+    ["20", { lineFormat: "^ I2 ^ F4.1 ^ F4.1", description: "Measurement correction data: Scale factor and addition constant" }],
+
+    // 100-to-161-series: Point attribute codes (from KOF documentation)
+    // We'll add a default pattern and a short description for each code in this range.
+    // Format used: '^ I3 ^ A.*' means an integer 3-char code followed by free text (attributes)
+
+    // Multiline saw method records (09.71 .. 09.79)
+    ["09.71", { lineFormat: "", description: "Start multiline 1 - saw method" }],  // "." means any character
+    ["09.72", { lineFormat: "", description: "Start multiline 2 - saw method" }],
+    ["09.73", { lineFormat: "", description: "Start multiline 3 - saw method" }],
+    ["09.74", { lineFormat: "", description: "Start multiline 4 - saw method" }],
+    ["09.75", { lineFormat: "", description: "Start multiline 5 - saw method" }],
+    ["09.76", { lineFormat: "", description: "Start multiline 6 - saw method" }],
+    ["09.77", { lineFormat: "", description: "Start multiline 7 - saw method" }],
+    ["09.78", { lineFormat: "", description: "Start multiline 8 - saw method" }],
+    ["09.79", { lineFormat: "", description: "Start multiline 9 - saw method" }],
+
+    // Multiline wave method records (09.81 .. 09.89)
+    ["09.81", { lineFormat: "", description: "Start multiline 1 - wave method" }],
+    ["09.82", { lineFormat: "", description: "Start multiline 2 - wave method" }],
+    ["09.83", { lineFormat: "", description: "Start multiline 3 - wave method" }],
+    ["09.84", { lineFormat: "", description: "Start multiline 4 - wave method" }],
+    ["09.85", { lineFormat: "", description: "Start multiline 5 - wave method" }],
+    ["09.86", { lineFormat: "", description: "Start multiline 6 - wave method" }],
+    ["09.87", { lineFormat: "", description: "Start multiline 7 - wave method" }],
+    ["09.88", { lineFormat: "", description: "Start multiline 8 - wave method" }],
+    ["09.89", { lineFormat: "", description: "Start multiline 9 - wave method" }],
+
+    // Other 09_xx records (group/structure markers)
+    ["09.90", { lineFormat: "^ I2 ^ A3", description: "Multiple lines/polygons start (group)" }],
+    ["09.91", { lineFormat: "^ I2 ^ A3", description: "Single line start / polyline start" }],
+    ["09.92", { lineFormat: "^ I2 ^ A3", description: "Start single line spline (spline parameters follow)" }],
+    ["09.93", { lineFormat: "^ I2 ^ A3", description: "Start single line circle (circle parameters follow)" }],
+    ["09.94", { lineFormat: "^ I2 ^ A3", description: "Start point cloud / point collection" }],
+    ["09.96", { lineFormat: "^ I2 ^ A3", description: "Close line -> becomes polygon" }],
+    ["09.99", { lineFormat: "^ I2 ^ A3", description: "End of line(s) / end of group" }],
 ]);
+
+// Helper: generate entries for 100..161 and then add them to kofCodes
+const kof100to161: Array<[string, KofCodeDefinition]> = Array.from({ length: 62 }).map((_, i) => {
+    const codeNum = 100 + i;
+    const key = String(codeNum);
+    return [key, { lineFormat: '^ I3 ^ A.*', description: `Point attribute code ${key}` }];
+});
+// Append generated entries to kofCodes
+kof100to161.forEach(e => kofCodes.set(e[0], e[1]));
+
     
 type KofMetadata = {
     fileName: string;
@@ -130,6 +144,15 @@ export class KOF_V2 {
             kofCodeCounts: Object.fromEntries(Array.from(kofCodes.keys()).map(k => [k, 0])),
         };
     }
+
+    // Getters for private properties
+    getfilePath(): string { return this._filePath; }
+    getfileVersion(): string { return this._fileVersion; }
+    getheader(): string { return this._header; }
+    getfileContent(): string[] { return this._fileContent; }
+    getEpsg(): Object { return { source: this._sourceEpsg, target: this._targetEpsg, sourceDescription: this._sourceEpsgDescription, targetDescription: this._targetEpsgDescription }; }
+    getKofType(): "coordinates" | "measurements" | null { return this._kofType; }
+    getMetadata(): KofMetadata { return this._metadata; }
 
     // Class instance methods
     _isEpsgValid(epsg: string | null, isSource: boolean = true): boolean {
