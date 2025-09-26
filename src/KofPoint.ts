@@ -2,59 +2,44 @@
 
 export interface KofPointProps {
   raw: string;
-  tokens: string[];
-  name?: string | null;
-  code?: string | null;
-  easting?: number | null;
-  northing?: number | null;
-  elevation?: number | null;
-  attrs?: Record<string, any> | null;
+  name: string | null;
+  code: string | null;
+  northing: number;
+  easting: number;
+  elevation?: number;
 }
 
 export class KofPoint {
   props: KofPointProps;
 
-  // Accept optional parsed object (from central parser) to avoid circular imports
-  constructor(kof05line: string, parsed?: any) {
-    if (typeof kof05line !== 'string') throw new TypeError('KofPoint constructor expects a string');
-    let p = parsed;
-    if (!p) {
-      // lightweight tokenization fallback
-      const tokens = kof05line.trim().split(/\s+/).filter(Boolean);
-      p = { tokens };
-      // strip leading '05' if present
-      if (p.tokens[0] === '05') p.tokens.shift();
-      // try to pick last two numeric tokens as north/east
-      const numRe = /^-?\d+(?:[.,]\d+)?$/;
-      const numIdx = p.tokens.map((t: string, i: number) => ({ t, i })).filter((x: any) => numRe.test(x.t));
-      if (numIdx.length >= 2) {
-        const a = parseFloat(String(numIdx[numIdx.length - 2].t).replace(',', '.'));
-        const b = parseFloat(String(numIdx[numIdx.length - 1].t).replace(',', '.'));
-        p.easting = b; p.northing = a; p.elevation = -500;
-      }
+  constructor(kofString: string, headerFormat: string|null = null) {
+    if (typeof kofString !== 'string') throw new TypeError('KofPoint constructor expects a string');
+    if (!headerFormat) {
+      headerFormat = "-05 PPPPPPPPPP KKKKKKKK XXXXXXXX.XXX YYYYYYY.YYY ZZZZ.ZZZ"  // indices are created from the header whitespace splits
     }
+    // Map header tokens to their index using only the first letter as the key
+    const tokenIndices = headerFormat.trim().split(/\s+/)
+      .map((t, i) => ({ t, i }))
+      .reduce((acc, cur) => { acc[cur.t[0]] = cur.i; return acc; }, {} as Record<string, number>);  // map of first-letter token to index
+    const tokens = kofString.trim().split(/\s+/).filter(Boolean);
+    if (tokens[0] === '05') tokens.shift();
+
     this.props = {
-      raw: kof05line,
-      tokens: p.tokens || [],
-      name: p.name || null,
-      code: p.code || null,
-      easting: p.easting ?? null,
-      northing: p.northing ?? null,
-      elevation: p.elevation ?? null,
-      attrs: p.attrs || null,
+      raw: kofString,
+      name: tokens[tokenIndices['P']] || null,
+      code: tokens[tokenIndices['K']] || null,
+      northing:   parseFloat(tokens[tokenIndices['X']] || '0'),
+      easting:    parseFloat(tokens[tokenIndices['Y']] || '0'),
+      elevation:  parseFloat(tokens[tokenIndices['Z']] || '0'),
     };
   }
 
-  toString() { return this.props.raw; }
-
-  static fromParsed(row: any) {
-    // Build a reasonable raw string for debugging; not used for parsing
-    const parts: string[] = ['05'];
-    if (row.name) parts.push(String(row.name));
-    if (row.code) parts.push(String(row.code));
-    if (row.northing !== undefined) parts.push(String(row.northing));
-    if (row.easting !== undefined) parts.push(String(row.easting));
-    if (row.elevation !== undefined) parts.push(String(row.elevation));
-    return new KofPoint(parts.join(' '), row);
+  // Create a KofPoint from a parsed object. Example:
+  // const p = KofPoint.fromParsed({ name: 'Point1', northing: 1000, easting: 2000, elevation: 50 });
+  // const p_min = KofPoint.fromParsed({ northing: 1000, easting: 2000 });  // the minimal valid point
+  static fromParsed(parsed: Partial<KofPointProps>) {
+    return new KofPoint(
+      parsed.raw || `05 ${parsed.name||''} ${parsed.code||''} ${parsed.northing||''} ${parsed.easting||''} ${parsed.elevation||''}`
+    );
   }
 }

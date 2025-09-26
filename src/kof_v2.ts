@@ -7,6 +7,7 @@ import { KofPoint } from './KofPoint';
 import { KofLine } from './KofLine';
 import { KofPolygon } from './KofPolygon';
 import { WkbGeomPoint, WkbGeomLinestring, WkbGeomPolygon } from './geometry';
+import { Key } from 'readline';
 
 // To run directly with Node.js for testing (from project root) - preferred command first:
 // npx tsc --project .\tsconfig.json; node .\dist\kof_v2.js;  <---
@@ -16,6 +17,19 @@ import { WkbGeomPoint, WkbGeomLinestring, WkbGeomPolygon } from './geometry';
 // Create a basic class KOF_V2 with a constructor that takes a version number and a method to display the version.
 // Create one static property to hold the default version.
 
+type KofCode = 
+    // Basic codes 00 to 12 and 20
+    "00" | "01" | "02" | "03" | "04" | "05" | "06" | "07" | "08" | "09" | "10" | "11" | "12" | "20" |
+    // 100 to 161
+    "100" | "101" | "102" | "103" | "104" | "105" | "106" | "107" | "108" | "109" | "110" | "111" | "112" | "113" | "114" | "115" | "116" | "117" | "118" | "119" |
+    "120" | "121" | "122" | "123" | "124" | "125" | "126" | "127" | "128" | "129" | "130" | "131" | "132" | "133" | "134" | "135" | "136" | "137" | "138" | "139" |
+    "140" | "141" | "142" | "143" | "144" | "145" | "146" | "147" | "148" | "149" | "150" | "151" | "152" | "153" | "154" | "155" | "156" | "157" | "158" | "159" |
+    "160" | "161" |
+    // 09_xx codes for multiline and group records
+    "09_72" | "09_73" | "09_74" | "09_75" | "09_76" | "09_77" | "09_78" | "09_79" |
+    "09_82" | "09_83" | "09_84" | "09_85" | "09_86" | "09_87" | "09_88" | "09_89" |
+    "09_90" | "09_91" | "09_92" | "09_93" | "09_94" | "09_96" | "09_99";
+
 type KofCodeDefinition = {
     lineFormat: string;
     description: string;
@@ -23,7 +37,7 @@ type KofCodeDefinition = {
 // A set of KOF line codes and short format/descriptions taken from the
 // KOF_format_dokumentasjon.pdf. Some formats are approximate and intended
 // as guidance for parsing/validation; they can be tightened later.
-const kofCodes = new Map<string, KofCodeDefinition>([
+const kofCodes = new Map<KofCode, KofCodeDefinition>([
     // Basic record types
     ["00", { lineFormat: "^ I2 ^ A64", description: "Comment / free text block" }],
     ["01", { lineFormat: "^ I2 ^ A12 ^ I8 ^ I3 ^ I7 ^ I4 ^ A12 ^ A12", description: "Administrative header: mission, date, version, coordinate system, municipality, units, observer" }],
@@ -44,36 +58,34 @@ const kofCodes = new Map<string, KofCodeDefinition>([
     // We'll add a default pattern and a short description for each code in this range.
     // Format used: '^ I3 ^ A.*' means an integer 3-char code followed by free text (attributes)
 
-    // Multiline saw method records (09.71 .. 09.79)
-    ["09.71", { lineFormat: "^ A5", description: "Start multiline 1 - saw method" }],  // "." means any character
-    ["09.72", { lineFormat: "^ A5", description: "Start multiline 2 - saw method" }],
-    ["09.73", { lineFormat: "^ A5", description: "Start multiline 3 - saw method" }],
-    ["09.74", { lineFormat: "^ A5", description: "Start multiline 4 - saw method" }],
-    ["09.75", { lineFormat: "^ A5", description: "Start multiline 5 - saw method" }],
-    ["09.76", { lineFormat: "^ A5", description: "Start multiline 6 - saw method" }],
-    ["09.77", { lineFormat: "^ A5", description: "Start multiline 7 - saw method" }],
-    ["09.78", { lineFormat: "^ A5", description: "Start multiline 8 - saw method" }],
-    ["09.79", { lineFormat: "^ A5", description: "Start multiline 9 - saw method" }],
+    // Multiline saw method records (09.72 .. 09.79)
+    ["09_72", { lineFormat: "^ A5", description: "Start multiline 2 - saw method" }],
+    ["09_73", { lineFormat: "^ A5", description: "Start multiline 3 - saw method" }],
+    ["09_74", { lineFormat: "^ A5", description: "Start multiline 4 - saw method" }],
+    ["09_75", { lineFormat: "^ A5", description: "Start multiline 5 - saw method" }],
+    ["09_76", { lineFormat: "^ A5", description: "Start multiline 6 - saw method" }],
+    ["09_77", { lineFormat: "^ A5", description: "Start multiline 7 - saw method" }],
+    ["09_78", { lineFormat: "^ A5", description: "Start multiline 8 - saw method" }],
+    ["09_79", { lineFormat: "^ A5", description: "Start multiline 9 - saw method" }],
 
-    // Multiline wave method records (09.81 .. 09.89)
-    ["09.81", { lineFormat: "^ A5", description: "Start multiline 1 - wave method" }],
-    ["09.82", { lineFormat: "^ A5", description: "Start multiline 2 - wave method" }],
-    ["09.83", { lineFormat: "^ A5", description: "Start multiline 3 - wave method" }],
-    ["09.84", { lineFormat: "^ A5", description: "Start multiline 4 - wave method" }],
-    ["09.85", { lineFormat: "^ A5", description: "Start multiline 5 - wave method" }],
-    ["09.86", { lineFormat: "^ A5", description: "Start multiline 6 - wave method" }],
-    ["09.87", { lineFormat: "^ A5", description: "Start multiline 7 - wave method" }],
-    ["09.88", { lineFormat: "^ A5", description: "Start multiline 8 - wave method" }],
-    ["09.89", { lineFormat: "^ A5", description: "Start multiline 9 - wave method" }],
+    // Multiline wave method records (09.82 .. 09.89)
+    ["09_82", { lineFormat: "^ A5", description: "Start multiline 2 - wave method" }],
+    ["09_83", { lineFormat: "^ A5", description: "Start multiline 3 - wave method" }],
+    ["09_84", { lineFormat: "^ A5", description: "Start multiline 4 - wave method" }],
+    ["09_85", { lineFormat: "^ A5", description: "Start multiline 5 - wave method" }],
+    ["09_86", { lineFormat: "^ A5", description: "Start multiline 6 - wave method" }],
+    ["09_87", { lineFormat: "^ A5", description: "Start multiline 7 - wave method" }],
+    ["09_88", { lineFormat: "^ A5", description: "Start multiline 8 - wave method" }],
+    ["09_89", { lineFormat: "^ A5", description: "Start multiline 9 - wave method" }],
 
     // Other 09_xx records (group/structure markers)
-    ["09.90", { lineFormat: "^ A5", description: "Multiple lines/polygons start (group)" }],
-    ["09.91", { lineFormat: "^ A5", description: "Single line start / polyline start" }],
-    ["09.92", { lineFormat: "^ A5", description: "Start single line spline (spline parameters follow)" }],
-    ["09.93", { lineFormat: "^ A5", description: "Start single line circle (circle parameters follow)" }],
-    ["09.94", { lineFormat: "^ A5", description: "Start point cloud / point collection" }],
-    ["09.96", { lineFormat: "^ A5", description: "Close line -> becomes polygon" }],
-    ["09.99", { lineFormat: "^ A5", description: "End of line(s) / end of group" }],
+    ["09_90", { lineFormat: "^ A5", description: "Multiple lines/polygons start (group)" }],
+    ["09_91", { lineFormat: "^ A5", description: "Single line start / polyline start" }],
+    ["09_92", { lineFormat: "^ A5", description: "Start single line spline (spline parameters follow)" }],
+    ["09_93", { lineFormat: "^ A5", description: "Start single line circle (circle parameters follow)" }],
+    ["09_94", { lineFormat: "^ A5", description: "Start point cloud / point collection" }],
+    ["09_96", { lineFormat: "^ A5", description: "Close line -> becomes polygon" }],
+    ["09_99", { lineFormat: "^ A5", description: "End of line(s) / end of group" }],
 ]);
 
 // Helper: generate entries for 100..161 and then add them to kofCodes
@@ -83,7 +95,7 @@ const kof100to161: Array<[string, KofCodeDefinition]> = Array.from({ length: 62 
     return [key, { lineFormat: '^ I3 ^ A.*', description: `Point attribute code ${key}` }];
 });
 // Append generated entries to kofCodes
-kof100to161.forEach(e => kofCodes.set(e[0], e[1]));
+kof100to161.forEach(e => kofCodes.set(e[0] as KofCode, e[1]));
 
     
 type KofMetadata = {
@@ -230,6 +242,28 @@ export class KOF_V2 {
 
     getSosiCodes(): Set<string> {
         return KOF_V2.getSosiCodesSet(this._fileContent);
+    }
+
+    _parseKofPoint(kofString: string): KofPoint | null {
+        const kofPoint = new KofPoint(kofString);
+        return (kofPoint.props.northing !== 0 && kofPoint.props.easting !== 0) ? kofPoint : null;
+    }
+
+    _parseKofLineOrPolygon(content: string[], startIndex: number, stopCodes: KofCode[]): { points: KofPoint[]; endIndex: number } {
+        const points: KofPoint[] = [];
+        let currentIndex = startIndex;
+        while (currentIndex < content.length) {
+            const line = content[currentIndex].trim();
+            if (stopCodes.includes(line as KofCode)) {
+                break;
+            }
+            const point = this._parseKofPoint(line);
+            if (point) {
+                points.push(point);
+            }
+            currentIndex++;
+        }
+        return { points, endIndex: currentIndex };
     }
 
     parseContentToGeometries(): void {

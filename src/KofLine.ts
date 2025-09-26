@@ -1,35 +1,40 @@
 import { KofPoint } from './KofPoint';
-import { WkbGeomPoint, WkbGeomLinestring } from './geometry';
+import { WkbGeomLinestring } from './geometry';
+
+export interface KofLineProps {
+  raw?: string;
+  name?: string;
+  code?: string;
+  points: KofPoint[];
+}
 
 export class KofLine {
-  rawLines: string[];
-  points: KofPoint[];
+  props: KofLineProps;
 
-  constructor(lines: string[]) {
-    if (!Array.isArray(lines)) throw new TypeError('KofLine expects an array of KOF 05 lines');
-    this.rawLines = lines;
-    this.points = lines.map(l => new KofPoint(l));
+  constructor(kofPoints: KofPoint[]) {
+    if (!Array.isArray(kofPoints) || kofPoints.length === 0) {
+      throw new TypeError('KofLine expects a non-empty array of KofPoint instances');
+    }
+    this.props = {
+      raw: kofPoints.map(p => p.props.raw).join('\n'),
+      name: kofPoints[0].props.name || undefined,
+      code: kofPoints[0].props.code || undefined,
+      points: kofPoints
+    };
   }
+
+  toString() { return this.props.raw; }
+
+  // toWkbLinestring(meta?: Record<string, any>) {
+  //   if (this.props.points.length < 2) return null;
+  //   const pts = this.props.points.map(p => new KofPoint(p.props.raw, null /* no headerFormat here */));
+  //   const wkbPoints = pts.map(p => new KofPoint(p.props.raw, null /* no headerFormat here */));
+  //   const linestring = new WkbGeomLinestring(wkbPoints);
+  //   return linestring.toWkb();
+  // }
 
   static fromParsedRows(rows: any[]) {
-    const k = new KofLine(rows.map(r => (r.raw ? r.raw : `05 ${r.name||''} ${r.code||''} ${r.northing||''} ${r.easting||''} ${r.elevation||''}`)) );
-    // override points with parsed data
-    k.points = rows.map(r => KofPoint.fromParsed(r));
-    return k;
+    const points = rows.map(r => KofPoint.fromParsed(r));
+    return new KofLine(points);
   }
-
-  toWkbLinestring(meta?: Record<string, any>) {
-    const pts = this.points.map(kp => new WkbGeomPoint(kp.props.easting ?? 0, kp.props.northing ?? 0, kp.props.elevation ?? -500, { ...(kp.props.attrs || {}), name: kp.props.name || null, fcode: kp.props.code || null, code: kp.props.code }));
-    if (pts.length < 2) return null;
-    const ls = new WkbGeomLinestring(pts);
-    ls.meta = meta ? { ...meta } : {};
-    const firstMeta = pts[0].meta || {};
-    if (!('name' in ls.meta)) ls.meta.name = firstMeta.name || null;
-    if (!('fcode' in ls.meta)) ls.meta.fcode = firstMeta.fcode || null;
-    return ls;
-  }
-
-  get length() { return this.points.length; }
-
-  toString() { return this.rawLines.join('\n'); }
 }
