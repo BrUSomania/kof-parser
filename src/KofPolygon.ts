@@ -1,40 +1,46 @@
 import { KofPoint } from './KofPoint';
 import { KofLine } from './KofLine';
-import { WkbGeomPoint, WkbGeomLinestring, WkbGeomPolygon } from './geometry';
+// import { WkbGeomPoint, WkbGeomLinestring, WkbGeomPolygon } from './geometry';
 
-export class KofPolygon {
-  rawLines: string[];
-  rings: KofLine[];
+export interface KofPolygonProps {
+  type:   'polygon';
+  raw:    string[] | null;
+  points: KofPoint[];
+  name:   string | null;
+  code:   string | null;
+}
 
-  constructor(lines: string[]) {
-    if (!Array.isArray(lines)) throw new TypeError('KofPolygon expects an array of KOF 05 lines');
-    this.rawLines = lines;
-    // For now treat entire set as a single outer ring
-    this.rings = [ new KofLine(lines) ];
+// KofPolygon reuses KofLine behaviour. We extend KofLine and replace the
+// props object with a polygon-specific shape while preserving the points and
+// raw input built by the super constructor.
+export class KofPolygon extends KofLine {
+  // Don't redeclare `props` with a conflicting type. Instead provide a
+  // typed view into the superclass props for polygon consumers.
+
+  constructor(kofStrings: string[], headerFormat: string|null = null) {
+    super(kofStrings, headerFormat);
   }
 
-  static fromParsedRows(rows: any[]) {
+  get propsAsPolygon(): KofPolygonProps {
+    const sp = (this.props as any) as {
+      raw: string[] | null;
+      points: KofPoint[];
+      name: string | null;
+      code: string | null;
+    };
+    return {
+      type: 'polygon',
+      raw: sp.raw,
+      points: sp.points,
+      name: sp.name ?? null,
+      code: sp.code ?? null,
+    };
+  }
+
+  static fromParsedRows(rows: any[], headerFormat: string|null = null) {
     const lines = rows.map(r => (r.raw ? r.raw : `05 ${r.name||''} ${r.code||''} ${r.northing||''} ${r.easting||''} ${r.elevation||''}`));
-    const p = new KofPolygon(lines);
-    p.rings = [ KofLine.fromParsedRows(rows) ];
-    return p;
+    return new KofPolygon(lines, headerFormat);
   }
 
-  toWkbPolygon(meta?: Record<string, any>) {
-    const ring = this.rings[0];
-    const ls = ring.toWkbLinestring(meta);
-    if (!ls) return null;
-    // Ensure closed
-    const pts = ls.points;
-    const closed = pts.length >= 4 && pts[0].x === pts[pts.length - 1].x && pts[0].y === pts[pts.length - 1].y;
-    if (!closed) {
-      const p0 = pts[0];
-      pts.push(new WkbGeomPoint(p0.x, p0.y, p0.z, p0.meta));
-    }
-    const poly = new WkbGeomPolygon([ls]);
-    poly.meta = ls.meta || {};
-    return poly;
-  }
-
-  toString() { return this.rawLines.join('\n'); }
+  toString() { return this.props.raw ? this.props.raw.join('\n') : ''; }
 }
