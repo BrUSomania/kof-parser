@@ -307,37 +307,34 @@ export class KOF_V2 {
     }
 
     _constructKofLinesFromSawMethod(lines: string[], numberOfLines: number): string[] {
-        // Saw (zig-zag) distribution: points are assigned to lines in a
-        // back-and-forth (0..N-1, N-1..0, 0..N-1...) pattern. We collect
-        // arrays per target line and then flatten to return array of lines
-        // grouped by their target line.
-        if (!Array.isArray(lines) || numberOfLines <= 0) return [];
-        const buckets: string[][] = Array.from({ length: numberOfLines }, () => []);
-        let idx = 0;
-        let dir = 1; // 1 -> forward, -1 -> backward
-        for (let i = 0; i < lines.length; i++) {
-            buckets[idx].push(lines[i]);
-            idx += dir;
-            if (idx === numberOfLines) { // went past last
-                idx = numberOfLines - 1;
-                dir = -1;
-                idx += dir; // step back in next iteration
-            } else if (idx < 0) { // went before first
-                idx = 0;
-                dir = 1;
-                idx += dir;
-            }
-        }
-        // Flatten buckets into an array of lines (preserve order within each bucket)
-        return buckets.flat();
-    }
-
-    _constructKofLinesFromWaveMethod(lines: string[], numberOfLines: number): string[] {
-        // Wave distribution: simple round-robin assignment across N lines
+        // Use round-robin distribution for saw to evenly distribute points
+        // across the requested number of lines. This matches expected
+        // behaviour for demo files where each output line should receive
+        // roughly totalPoints/numberOfLines points (balanced).
         if (!Array.isArray(lines) || numberOfLines <= 0) return [];
         const buckets: string[][] = Array.from({ length: numberOfLines }, () => []);
         for (let i = 0; i < lines.length; i++) {
             const idx = i % numberOfLines;
+            buckets[idx].push(lines[i]);
+        }
+        return buckets.flat();
+    }
+
+    _constructKofLinesFromWaveMethod(lines: string[], numberOfLines: number): string[] {
+        // Wave distribution: up-then-down assignment across N lines.
+        // For numberOfLines = N, produce an index sequence like:
+        // 0,1,2,...,N-1, N-1, N-2, ..., 1,0, 0,1,... (cycle length = 2*N)
+        // This intentionally repeats the endpoints so a block of 2*N points
+        // maps to forward then backward including the endpoints (matching
+        // the demo expectation: a b c d e f f e d c b a for N=6).
+        if (!Array.isArray(lines) || numberOfLines <= 0) return [];
+        if (numberOfLines === 1) return lines.slice();
+
+        const buckets: string[][] = Array.from({ length: numberOfLines }, () => []);
+        const cycleLen = numberOfLines * 2;
+        for (let i = 0; i < lines.length; i++) {
+            const k = i % cycleLen;
+            const idx = (k < numberOfLines) ? k : (cycleLen - k - 1);
             buckets[idx].push(lines[i]);
         }
         return buckets.flat();

@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2019",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "outDir": "src-temp"
+  },
+  "include": ["src/kof_v2.ts", "src/data/epsg/*.json"]
+}
