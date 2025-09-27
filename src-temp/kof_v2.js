@@ -272,9 +272,8 @@ class KOF_V2 {
     }
     _constructKofLinesFromSawMethod(lines, numberOfLines) {
         // Use round-robin distribution for saw to evenly distribute points
-        // across the requested number of lines. This matches expected
-        // behaviour for demo files where each output line should receive
-        // roughly totalPoints/numberOfLines points (balanced).
+        // across the requested number of lines. This returns an array of
+        // KofLine objects (one per output line).
         if (!Array.isArray(lines) || numberOfLines <= 0)
             return [];
         const buckets = Array.from({ length: numberOfLines }, () => []);
@@ -282,7 +281,8 @@ class KOF_V2 {
             const idx = i % numberOfLines;
             buckets[idx].push(lines[i]);
         }
-        return buckets.flat();
+        // Convert each bucket of raw 05-lines into a KofLine instance
+        return buckets.map(bucket => new KofLine_1.KofLine(bucket));
     }
     _constructKofLinesFromWaveMethod(lines, numberOfLines) {
         // Wave distribution: up-then-down assignment across N lines.
@@ -294,7 +294,7 @@ class KOF_V2 {
         if (!Array.isArray(lines) || numberOfLines <= 0)
             return [];
         if (numberOfLines === 1)
-            return lines.slice();
+            return [new KofLine_1.KofLine(lines.slice())];
         const buckets = Array.from({ length: numberOfLines }, () => []);
         const cycleLen = numberOfLines * 2;
         for (let i = 0; i < lines.length; i++) {
@@ -302,7 +302,7 @@ class KOF_V2 {
             const idx = (k < numberOfLines) ? k : (cycleLen - k - 1);
             buckets[idx].push(lines[i]);
         }
-        return buckets.flat();
+        return buckets.map(bucket => new KofLine_1.KofLine(bucket));
     }
     parseContentToGeometries() {
         for (let lineIndex = 0; lineIndex < this._fileContent.length; lineIndex++) {
@@ -336,13 +336,16 @@ class KOF_V2 {
                 case '09_76':
                 case '09_77':
                 case '09_78':
-                case '09_79':
+                case '09_79': {
+                    // Start multiline N - saw method
                     const numberOfMultilineSaw = parseInt(code.split('_')[1], 10) - 70;
                     stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
-                    lineStrings = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
+                    const rawLines = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
                     lineIndex = stopCode.endIndex; // Move index to end of line/polygon
-                    // Start multiline N - saw method
+                    const sawLines = this._constructKofLinesFromSawMethod(rawLines, numberOfMultilineSaw);
+                    sawLines.forEach(kl => this.addGeometry(kl));
                     break;
+                }
                 case '09_82':
                 case '09_83':
                 case '09_84':
@@ -350,13 +353,16 @@ class KOF_V2 {
                 case '09_86':
                 case '09_87':
                 case '09_88':
-                case '09_89':
+                case '09_89': {
+                    // Start multiline N - wave method
                     const numberOfMultilineWave = parseInt(code.split('_')[1], 10) - 80;
                     stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
-                    lineStrings = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
+                    const rawLines = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
                     lineIndex = stopCode.endIndex; // Move index to end of line/polygon
-                    // Start multiline N - wave method
+                    const waveLines = this._constructKofLinesFromWaveMethod(rawLines, numberOfMultilineWave);
+                    waveLines.forEach(kl => this.addGeometry(kl));
                     break;
+                }
                 case '09_91':
                     // Start single line / polyline - find line end (09_96 or 09_99)
                     stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
