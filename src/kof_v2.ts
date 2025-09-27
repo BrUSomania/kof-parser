@@ -245,26 +245,57 @@ export class KOF_V2 {
         return KOF_V2.getSosiCodesSet(this._fileContent);
     }
 
+    addGeometry(geometry: KofPoint | KofLine | KofPolygon): void {
+        const geometryType = geometry.constructor.name;
+        switch (geometryType) {
+            case 'KofPoint':
+                const pointGeom = geometry as KofPoint;
+                this._fileGeometries.push(pointGeom);
+                this._metadata.geomCounts.points += 1;
+                break;
+            case 'KofLine':
+                const lineGeom = geometry as KofLine;
+                this._fileGeometries.push(lineGeom);
+                this._metadata.geomCounts.lineStrings += 1;
+                this._metadata.geomCounts.linePoints += lineGeom.props.points.length;
+                break;
+            case 'KofPolygon':
+                const polygonGeom = geometry as KofPolygon;
+                this._fileGeometries.push(polygonGeom);
+                this._metadata.geomCounts.polygons += 1;
+                this._metadata.geomCounts.polygonPoints += polygonGeom.props.points.length;
+                break;
+        }
+    }
+
     _parseKofPoint(kofString: string): KofPoint | null {
         const kofPoint = new KofPoint(kofString);
         return (kofPoint.props.northing !== 0 && kofPoint.props.easting !== 0) ? kofPoint : null;
     }
 
-    _parseKofLineOrPolygon(content: string[], startIndex: number, stopCodes: KofCode[]): { points: KofPoint[]; endIndex: number } {
-        const points: KofPoint[] = [];
-        let currentIndex = startIndex;
-        while (currentIndex < content.length) {
-            const line = content[currentIndex].trim();
-            if (stopCodes.includes(line as KofCode)) {
-                break;
+    _getIndexAndCodeOfStopcode(startIndex: number): { endIndex: number, code: KofCode } {
+        for (let i = startIndex; i < this._fileContent.length; i++) {
+            const line = this._fileContent[i].trim();
+            // If line starts with 09_91 (single line start), 09_96 (close line -> polygon) or 09_99 or 09_72..09_79 or 09_82..09_89 (multiline starts), it's the end of the current line/polygon
+            const trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+            if (trimmedLine[0] === '-') continue;
+            const kofCode: KofCode = (trimmedLine.split(/\s+/)[0] as KofCode).replace(/\s+/g, '_') as KofCode;
+            if (kofCode === '09_96' || kofCode === '09_99' || kofCode === '09_91' ||
+                (kofCode >= '09_72' && kofCode <= '09_79') ||
+                (kofCode >= '09_82' && kofCode <= '09_89')) {
+                return { endIndex: i, code: kofCode };
             }
-            const point = this._parseKofPoint(line);
-            if (point) {
-                points.push(point);
-            }
-            currentIndex++;
         }
-        return { points, endIndex: currentIndex };
+        return { endIndex: this._fileContent.length - 1, code: '09_99' }; // Default to end of file if no stop code found
+    }
+
+    _getKofLineOrPolygonStrings(startIndex: number, endIndex: number): string[] {
+        const lines: string[] = [];
+        for (let i = startIndex; i <= endIndex; i++) {
+            lines.push(this._fileContent[i]);
+        }
+        return lines;
     }
 
     parseContentToGeometries(): void {
@@ -286,7 +317,8 @@ export class KOF_V2 {
                     // Add comment handling if needed
                     break;
                 case '05':  // Point record (could be part of line or polygon)
-                    // this._fileGeometries.push(new KofPoint(tokens));
+                    const kofPoint = this._parseKofPoint(line);
+                    if (kofPoint) this.addGeometry(kofPoint);
                     break;
                 case '09_72':
                 case '09_73':
@@ -311,17 +343,24 @@ export class KOF_V2 {
                     // Start multiline N - wave method
                     break;
                 case '09_91':
-                    this._fileGeometries.push(new KofLine(tokens));
-                    break;
-                case '09_96':
-                    // Close line -> line becomes polygon
-                    break;
-                case '09_99':
-                    // End of line(s) / end of group
+                    // Start single line / polyline - find line end (09_96 or 09_99)
+                    const { endIndex, code: endCode } = this._getIndexAndCodeOfStopcode(lineIndex + 1) || { endIndex: lineIndex, code: '09_99' };
+                    const lineStrings = this._getKofLineOrPolygonStrings(lineIndex + 1, endIndex - 1);
+                    lineIndex = endIndex; // Move index to end of line/polygon
+                    switch (endCode) {
+                        case '09_96':
+                            const kofPolygon = new KofPolygon(lineStrings);
+                            this.addGeometry(kofPolygon);
+                            break;
+                        case '09_99':
+                            const kofLine = new KofLine(lineStrings);
+                            this.addGeometry(kofLine);
+                            break;
                     break;
                 // Add more cases as needed for other codes
                 default:
                     continue; // Ignore other codes for now
+                }
             }
         }
     }
