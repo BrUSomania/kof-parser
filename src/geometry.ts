@@ -23,10 +23,10 @@ export class WkbGeomLinestring {
 }
 
 export class WkbGeomPolygon {
-  rings: WkbGeomLinestring[]; // Each ring is a closed linestring
+  points: WkbGeomPoint[];
   meta?: Record<string, any>;
-  constructor(rings: WkbGeomLinestring[], meta?: Record<string, any>) {
-    this.rings = rings;
+  constructor(points: WkbGeomPoint[], meta?: Record<string, any>) {
+    this.points = points;
     if (meta) this.meta = meta;
   }
 }

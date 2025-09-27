@@ -1,5 +1,5 @@
 import { KofPoint } from './KofPoint';
-import { WkbGeomLinestring } from './geometry';
+import { WkbGeomPoint, WkbGeomLinestring } from './geometry';
 
 export interface KofLineProps {
   type:   'line';
@@ -29,6 +29,11 @@ export class KofLine {
   }
 
   toString() { return this.props.raw ? this.props.raw.join('\n') : ''; }
+  toWkbLinestring(meta?: Record<string, any>) {
+    if (this.props.points.length === 0) return null;
+    const pts = this.props.points.map(p => new WkbGeomPoint(p.props.easting, p.props.northing, p.props.elevation, { name: p.props.name, code: p.props.code }));
+    return new WkbGeomLinestring(pts, meta);
+  }
 
   static fromParsedRows(rows: any[], headerFormat: string|null = null) {
     const lines = rows.map(r => (r.raw ? r.raw : `05 ${r.name||''} ${r.code||''} ${r.northing||''} ${r.easting||''} ${r.elevation||''}`));

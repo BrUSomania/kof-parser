@@ -1,4 +1,4 @@
-// Lightweight KofPoint class (self-contained parsing fallback)
+import { WkbGeomPoint } from './geometry';
 
 export interface KofPointProps {
   type:  'point';  
@@ -81,6 +81,9 @@ export class KofPoint {
   }
 
   toString() { return this.props.raw || ''; }
+  toWkbPoint(meta?: Record<string, any>) {
+    return new WkbGeomPoint(this.props.easting, this.props.northing, this.props.elevation, { name: this.props.name, code: this.props.code, ...meta });
+  }
 
   // Create a KofPoint from a parsed object. Example:
   // const p = KofPoint.fromParsed({ name: 'Point1', northing: 1000, easting: 2000, elevation: 50 });

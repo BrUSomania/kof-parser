@@ -1,6 +1,6 @@
 import { KofPoint } from './KofPoint';
 import { KofLine } from './KofLine';
-// import { WkbGeomPoint, WkbGeomLinestring, WkbGeomPolygon } from './geometry';
+import { WkbGeomPoint, WkbGeomPolygon } from './geometry';
 
 export interface KofPolygonProps {
   type:   'polygon';
@@ -37,10 +37,15 @@ export class KofPolygon extends KofLine {
     };
   }
 
+  toString() { return this.props.raw ? this.props.raw.join('\n') : ''; }
+  toWkbPolygon(meta?: Record<string, any>) {
+    if (this.propsAsPolygon.points.length === 0) return null;
+    const pts = this.propsAsPolygon.points.map(p => new WkbGeomPoint(p.props.easting, p.props.northing, p.props.elevation, { name: p.props.name, code: p.props.code }));
+    return new WkbGeomPolygon(pts, meta);
+  }
+
   static fromParsedRows(rows: any[], headerFormat: string|null = null) {
     const lines = rows.map(r => (r.raw ? r.raw : `05 ${r.name||''} ${r.code||''} ${r.northing||''} ${r.easting||''} ${r.elevation||''}`));
     return new KofPolygon(lines, headerFormat);
   }
-
-  toString() { return this.props.raw ? this.props.raw.join('\n') : ''; }
 }
