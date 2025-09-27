@@ -306,6 +306,43 @@ export class KOF_V2 {
         return lines;
     }
 
+    _constructKofLinesFromSawMethod(lines: string[], numberOfLines: number): string[] {
+        // Saw (zig-zag) distribution: points are assigned to lines in a
+        // back-and-forth (0..N-1, N-1..0, 0..N-1...) pattern. We collect
+        // arrays per target line and then flatten to return array of lines
+        // grouped by their target line.
+        if (!Array.isArray(lines) || numberOfLines <= 0) return [];
+        const buckets: string[][] = Array.from({ length: numberOfLines }, () => []);
+        let idx = 0;
+        let dir = 1; // 1 -> forward, -1 -> backward
+        for (let i = 0; i < lines.length; i++) {
+            buckets[idx].push(lines[i]);
+            idx += dir;
+            if (idx === numberOfLines) { // went past last
+                idx = numberOfLines - 1;
+                dir = -1;
+                idx += dir; // step back in next iteration
+            } else if (idx < 0) { // went before first
+                idx = 0;
+                dir = 1;
+                idx += dir;
+            }
+        }
+        // Flatten buckets into an array of lines (preserve order within each bucket)
+        return buckets.flat();
+    }
+
+    _constructKofLinesFromWaveMethod(lines: string[], numberOfLines: number): string[] {
+        // Wave distribution: simple round-robin assignment across N lines
+        if (!Array.isArray(lines) || numberOfLines <= 0) return [];
+        const buckets: string[][] = Array.from({ length: numberOfLines }, () => []);
+        for (let i = 0; i < lines.length; i++) {
+            const idx = i % numberOfLines;
+            buckets[idx].push(lines[i]);
+        }
+        return buckets.flat();
+    }
+
     parseContentToGeometries(): void {
         for (let lineIndex = 0; lineIndex < this._fileContent.length; lineIndex++) {
             // Iterate with index to track line numbers and ignore lines starting with '-'
@@ -341,6 +378,7 @@ export class KOF_V2 {
                     const numberOfMultilineSaw = parseInt(code.split('_')[1], 10) - 70;
                     stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
                     lineStrings = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
+                    lineIndex = stopCode.endIndex; // Move index to end of line/polygon
                     // Start multiline N - saw method
                     break;
                 case '09_82':
@@ -354,6 +392,7 @@ export class KOF_V2 {
                     const numberOfMultilineWave = parseInt(code.split('_')[1], 10) - 80;
                     stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
                     lineStrings = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
+                    lineIndex = stopCode.endIndex; // Move index to end of line/polygon
                     // Start multiline N - wave method
                     break;
                 case '09_91':
@@ -363,6 +402,8 @@ export class KOF_V2 {
                     lineIndex = stopCode.endIndex; // Move index to end of line/polygon
                     switch (stopCode.code) {
                         case '09_91':  // stop current line (same as "09_99") and start a new one ("09_91") by decrementing lineIndex
+                        case '09_72': case '09_73': case '09_74': case '09_75': case '09_76': case '09_77': case '09_78': case '09_79':
+                        case '09_82': case '09_83': case '09_84': case '09_85': case '09_86': case '09_87': case '09_88': case '09_89':
                             const kofLineStop91 = new KofLine(lineStrings);
                             this.addGeometry(kofLineStop91);
                             lineIndex--; // This makes sure we re-process the new 09_91 line in the next iteration
