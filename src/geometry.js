@@ -2,8 +2,8 @@
 // Geometry classes for KOF geodata
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WkbGeomPolygon = exports.WkbGeomLinestring = exports.WkbGeomPoint = void 0;
-var WkbGeomPoint = /** @class */ (function () {
-    function WkbGeomPoint(x, y, z, meta) {
+class WkbGeomPoint {
+    constructor(x, y, z, meta) {
         this.x = x;
         this.y = y;
         if (z !== undefined)
@@ -11,24 +11,21 @@ var WkbGeomPoint = /** @class */ (function () {
         if (meta)
             this.meta = meta;
     }
-    return WkbGeomPoint;
-}());
+}
 exports.WkbGeomPoint = WkbGeomPoint;
-var WkbGeomLinestring = /** @class */ (function () {
-    function WkbGeomLinestring(points, meta) {
+class WkbGeomLinestring {
+    constructor(points, meta) {
         this.points = points;
         if (meta)
             this.meta = meta;
     }
-    return WkbGeomLinestring;
-}());
+}
 exports.WkbGeomLinestring = WkbGeomLinestring;
-var WkbGeomPolygon = /** @class */ (function () {
-    function WkbGeomPolygon(rings, meta) {
-        this.rings = rings;
+class WkbGeomPolygon {
+    constructor(points, meta) {
+        this.points = points;
         if (meta)
             this.meta = meta;
     }
-    return WkbGeomPolygon;
-}());
+}
 exports.WkbGeomPolygon = WkbGeomPolygon;

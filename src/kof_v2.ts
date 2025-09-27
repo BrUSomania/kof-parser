@@ -173,6 +173,7 @@ export class KOF_V2 {
     getheader(): string { return this._header; }
     getfileContent(): string[] { return this._fileContent; }
     getignoredLines(): string[] { return Object.values(this._ignoredLines); }
+    getfileGeometries(): Array<KofPoint | KofLine | KofPolygon> { return this._fileGeometries; }
     getEpsg(): Object { return { source: this._sourceEpsg, target: this._targetEpsg, sourceDescription: this._sourceEpsgDescription, targetDescription: this._targetEpsgDescription }; }
     getKofType(): "coordinates" | "measurements" | null { return this._kofType; }
     getMetadata(): KofMetadata { return this._metadata; }
