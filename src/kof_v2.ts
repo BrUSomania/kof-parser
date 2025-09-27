@@ -112,6 +112,9 @@ type KofMetadata = {
     kofCodeCounts: { [key: string]: number };
 };
 type EpsgCode = keyof typeof epsgDefs | null;
+type KofComments = Record<number, { data: string; comment: string }>;  // when "00" line is parsed
+type KofAdmin = Record<number, { data: string; adminInfo: string }>;  // when "01" line is parsed
+type KofLineError = Record<number, { data: string; errorMessage: string }>;  // if an error occurs while parsing a line
 
 export class KOF_V2 {
     // Instance properties
@@ -119,6 +122,9 @@ export class KOF_V2 {
     _fileVersion: string;
     _header: string;
     _fileContent: string[];
+    _commentBlocks: KofComments = {};
+    _adminBlocks: KofAdmin = {};
+    _errors: KofLineError = {};
     // Ignored lines should be an object where line numbers map to the actual line content
     _ignoredLines: { [lineNumber: number]: string };
     _fileGeometries: Array<KofPoint | KofLine | KofPolygon>; // Placeholder for parsed geometries
@@ -168,15 +174,19 @@ export class KOF_V2 {
     }
 
     // Getters for private properties
-    getfilePath(): string { return this._filePath; }
-    getfileVersion(): string { return this._fileVersion; }
-    getheader(): string { return this._header; }
-    getfileContent(): string[] { return this._fileContent; }
-    getignoredLines(): string[] { return Object.values(this._ignoredLines); }
-    getfileGeometries(): Array<KofPoint | KofLine | KofPolygon> { return this._fileGeometries; }
+    getFilePath(): string { return this._filePath; }
+    getFileVersion(): string { return this._fileVersion; }
+    getHeader(): string { return this._header; }
+    getCommentBlocks(): KofComments { return this._commentBlocks; }
+    getAdminBlocks(): KofAdmin { return this._adminBlocks; }
+    getFileContent(): string[] { return this._fileContent; }
+    getErrors(): KofLineError { return this._errors; }
+    getIgnoredLines(): string[] { return Object.values(this._ignoredLines); }
+    getFileGeometries(): Array<KofPoint | KofLine | KofPolygon> { return this._fileGeometries; }
     getEpsg(): Object { return { source: this._sourceEpsg, target: this._targetEpsg, sourceDescription: this._sourceEpsgDescription, targetDescription: this._targetEpsgDescription }; }
     getKofType(): "coordinates" | "measurements" | null { return this._kofType; }
     getMetadata(): KofMetadata { return this._metadata; }
+    getSosiCodes(): Set<string> { return KOF_V2.getSosiCodesSet(this._fileContent); }
 
     // Class instance methods
     _isEpsgValid(epsg: EpsgCode, isSource: boolean = true): boolean {
@@ -241,10 +251,6 @@ export class KOF_V2 {
         return {};
     }
 
-    getSosiCodes(): Set<string> {
-        return KOF_V2.getSosiCodesSet(this._fileContent);
-    }
-
     addGeometry(geometry: KofPoint | KofLine | KofPolygon): void {
         const geometryType = geometry.constructor.name;
         switch (geometryType) {
@@ -265,6 +271,8 @@ export class KOF_V2 {
                 this._metadata.geomCounts.polygons += 1;
                 this._metadata.geomCounts.polygonPoints += polygonGeom.props.points.length;
                 break;
+            default:
+                throw new Error(`[addGeometry()] Unsupported geometry type: ${geometryType}`);
         }
     }
 
@@ -290,7 +298,7 @@ export class KOF_V2 {
         return { endIndex: this._fileContent.length - 1, code: '09_99' }; // Default to end of file if no stop code found
     }
 
-    _getKofLineOrPolygonStrings(startIndex: number, endIndex: number): string[] {
+    _getKofLinesFromIndexToNextStopCode(startIndex: number, endIndex: number): string[] {
         const lines: string[] = [];
         for (let i = startIndex; i <= endIndex; i++) {
             lines.push(this._fileContent[i]);
@@ -311,6 +319,8 @@ export class KOF_V2 {
             const tokens = trimmedLine.split(/\s+/);  // Split by whitespace
             let code = tokens[0].replace(/\s+/g, '_');  // Normalize spaces to underscores
 
+            let stopCode: { endIndex: number, code: KofCode } | null = null;
+            let lineStrings: string[] = [];
             // Parse geometry based on code
             switch (code) {
                 case '00':  // Comment / free text block
@@ -329,6 +339,8 @@ export class KOF_V2 {
                 case '09_78':
                 case '09_79':
                     const numberOfMultilineSaw = parseInt(code.split('_')[1], 10) - 70;
+                    stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
+                    lineStrings = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
                     // Start multiline N - saw method
                     break;
                 case '09_82':
@@ -340,26 +352,35 @@ export class KOF_V2 {
                 case '09_88':
                 case '09_89':
                     const numberOfMultilineWave = parseInt(code.split('_')[1], 10) - 80;
+                    stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
+                    lineStrings = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
                     // Start multiline N - wave method
                     break;
                 case '09_91':
                     // Start single line / polyline - find line end (09_96 or 09_99)
-                    const { endIndex, code: endCode } = this._getIndexAndCodeOfStopcode(lineIndex + 1) || { endIndex: lineIndex, code: '09_99' };
-                    const lineStrings = this._getKofLineOrPolygonStrings(lineIndex + 1, endIndex - 1);
-                    lineIndex = endIndex; // Move index to end of line/polygon
-                    switch (endCode) {
+                    stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
+                    lineStrings = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
+                    lineIndex = stopCode.endIndex; // Move index to end of line/polygon
+                    switch (stopCode.code) {
+                        case '09_91':  // stop current line (same as "09_99") and start a new one ("09_91") by decrementing lineIndex
+                            const kofLineStop91 = new KofLine(lineStrings);
+                            this.addGeometry(kofLineStop91);
+                            lineIndex--; // This makes sure we re-process the new 09_91 line in the next iteration
+                            break;
                         case '09_96':
                             const kofPolygon = new KofPolygon(lineStrings);
                             this.addGeometry(kofPolygon);
                             break;
                         case '09_99':
-                            const kofLine = new KofLine(lineStrings);
-                            this.addGeometry(kofLine);
+                            const kofLineStop99 = new KofLine(lineStrings);
+                            this.addGeometry(kofLineStop99);
                             break;
                     break;
                 // Add more cases as needed for other codes
-                default:
-                    continue; // Ignore other codes for now
+                default:  // e.g. "09_96", "09_99" while not creating a line/polygon
+                    this._ignoredLines[lineIndex + 1] = line;
+                    this._errors[lineIndex + 1] = { data: line, errorMessage: `Unexpected standalone code ${code}` };
+                    throw new Error(`[parseLine()] Unexpected standalone code ${code} at line ${lineIndex + 1}`);
                 }
             }
         }
