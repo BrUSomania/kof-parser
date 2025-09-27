@@ -119,11 +119,10 @@ class KOF_V2 {
         this._fileVersion = "1.0.0"; // Default version for demonstration
         this._header = "-05 PPPPPPPPPP KKKKKKKK XXXXXXXX.XXX YYYYYYY.YYY ZZZZ.ZZZ";
         this._fileContent = KOF_V2.convertKofLinesToArray(filePath);
-        this._ignoredLines = {};
-        this._fileGeometries = []; // Placeholder for parsed geometries
         this._kofType = null;
         this._sourceEpsg = null;
         this._targetEpsg = null;
+        this._fileGeometries = [];
         this._metadata = {
             fileName: path.basename(filePath),
             fileExtension: path.extname(filePath),
@@ -142,6 +141,12 @@ class KOF_V2 {
             },
             kofCodeCounts: Object.fromEntries(Array.from(kofCodes.keys()).map(k => [k, 0])),
         };
+        // Parse the file content to populate geometries and metadata
+        const parsedContent = this.parseContentToGeometries(this._fileContent);
+        this._fileGeometries = parsedContent.geometries;
+        this._ignoredLines = parsedContent.ignoredLines;
+        this._commentBlocks = parsedContent.commentBlocks;
+        this._errors = parsedContent.errors;
     }
     // Getters for private properties
     getFilePath() { return this._filePath; }
@@ -210,12 +215,58 @@ class KOF_V2 {
         console.log(`Reprojecting from ${sourceEpsg} to ${targetEpsg} - not yet implemented`);
     }
     convertToWkbGeometries() {
-        // Placeholder: actual conversion logic to WKB geometries would go here
-        return [];
+        const out = [];
+        for (const g of this._fileGeometries) {
+            if (!g)
+                continue;
+            const t = g.constructor.name;
+            try {
+                if (t === 'KofPoint' && typeof g.toWkbPoint === 'function') {
+                    out.push(g.toWkbPoint());
+                }
+                else if (t === 'KofLine' && typeof g.toWkbLinestring === 'function') {
+                    const w = g.toWkbLinestring();
+                    if (w)
+                        out.push(w);
+                }
+                else if (t === 'KofPolygon' && typeof g.toWkbPolygon === 'function') {
+                    const w = g.toWkbPolygon();
+                    if (w)
+                        out.push(w);
+                }
+            }
+            catch (e) {
+                // skip problematic geometry but continue
+            }
+        }
+        return out;
     }
     convertToGeoJson() {
-        // Placeholder: actual conversion logic to GeoJSON would go here
-        return {};
+        const features = [];
+        for (const g of this._fileGeometries) {
+            if (!g)
+                continue;
+            const t = g.constructor.name;
+            try {
+                if (t === 'KofPoint' && typeof g.toGeoJSON === 'function') {
+                    features.push(g.toGeoJSON());
+                }
+                else if (t === 'KofLine' && typeof g.toGeoJSON === 'function') {
+                    const f = g.toGeoJSON();
+                    if (f)
+                        features.push(f);
+                }
+                else if (t === 'KofPolygon' && typeof g.toGeoJSON === 'function') {
+                    const f = g.toGeoJSON();
+                    if (f)
+                        features.push(f);
+                }
+            }
+            catch (e) {
+                // continue
+            }
+        }
+        return { type: 'FeatureCollection', features };
     }
     addGeometry(geometry) {
         const geometryType = geometry.constructor.name;
@@ -304,15 +355,26 @@ class KOF_V2 {
         }
         return buckets.map(bucket => new KofLine_1.KofLine(bucket));
     }
-    parseContentToGeometries() {
-        for (let lineIndex = 0; lineIndex < this._fileContent.length; lineIndex++) {
+    parseContentToGeometries(fileContent) {
+        if (!Array.isArray(fileContent) || fileContent.length === 0) {
+            throw new Error("Invalid or empty file content");
+        }
+        // Ensure instance geometry storage is used so metadata and geometry
+        // arrays remain in sync. We reset the instance storage here and use
+        // this.addGeometry(...) for every geometry created.
+        this._fileGeometries = [];
+        const geometries = this._fileGeometries;
+        const ignoredLines = {};
+        const commentBlocks = {};
+        const errors = {};
+        for (let lineIndex = 0; lineIndex < fileContent.length; lineIndex++) {
             // Iterate with index to track line numbers and ignore lines starting with '-'
-            const line = this._fileContent[lineIndex];
+            const line = fileContent[lineIndex];
             const trimmedLine = line.trim();
             if (!trimmedLine)
                 continue;
             if (trimmedLine[0] === '-') { // Example: ignore comment lines starting with '-'
-                this._ignoredLines[lineIndex + 1] = line;
+                ignoredLines[lineIndex + 1] = line;
                 continue;
             }
             const tokens = trimmedLine.split(/\s+/); // Split by whitespace
@@ -322,7 +384,7 @@ class KOF_V2 {
             // Parse geometry based on code
             switch (code) {
                 case '00': // Comment / free text block
-                    // Add comment handling if needed
+                    commentBlocks[lineIndex + 1] = { data: line, message: trimmedLine.substring(2).trim() };
                     break;
                 case '05': // Point record (could be part of line or polygon)
                     const kofPoint = this._parseKofPoint(line);
@@ -342,34 +404,7 @@ class KOF_V2 {
                     stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
                     const rawLines = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
                     lineIndex = stopCode.endIndex; // Move index to end of line/polygon
-                    const sawLines = this._constructKofLinesFromSawMethod(rawLines, numberOfMultilineSaw);
-                    sawLines.forEach(kl => this.addGeometry(kl));
-                    break;
-                }
-                case '09_82':
-                case '09_83':
-                case '09_84':
-                case '09_85':
-                case '09_86':
-                case '09_87':
-                case '09_88':
-                case '09_89': {
-                    // Start multiline N - wave method
-                    const numberOfMultilineWave = parseInt(code.split('_')[1], 10) - 80;
-                    stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
-                    const rawLines = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
-                    lineIndex = stopCode.endIndex; // Move index to end of line/polygon
-                    const waveLines = this._constructKofLinesFromWaveMethod(rawLines, numberOfMultilineWave);
-                    waveLines.forEach(kl => this.addGeometry(kl));
-                    break;
-                }
-                case '09_91':
-                    // Start single line / polyline - find line end (09_96 or 09_99)
-                    stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
-                    lineStrings = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
-                    lineIndex = stopCode.endIndex; // Move index to end of line/polygon
                     switch (stopCode.code) {
-                        case '09_91': // stop current line (same as "09_99") and start a new one ("09_91") by decrementing lineIndex
                         case '09_72':
                         case '09_73':
                         case '09_74':
@@ -386,6 +421,109 @@ class KOF_V2 {
                         case '09_87':
                         case '09_88':
                         case '09_89':
+                        case '09_91':
+                            // If we hit another multiline start, process current and re-process new start
+                            const sawLines = this._constructKofLinesFromSawMethod(rawLines, numberOfMultilineSaw);
+                            sawLines.forEach(kl => this.addGeometry(kl));
+                            lineIndex--; // This makes sure we re-process the new 09_7x line in the next iteration
+                            break;
+                        case '09_96':
+                            // Close current multiline as polygons
+                            const sawPolygons = this._constructKofLinesFromSawMethod(rawLines, numberOfMultilineSaw);
+                            sawPolygons.forEach(kl => {
+                                const polygon = new KofPolygon_1.KofPolygon(kl.props.points.map(p => `${p.props.northing} ${p.props.easting} ${p.props.elevation}`));
+                                this.addGeometry(polygon);
+                            });
+                            break;
+                        case '09_99':
+                            // End current multiline as lines
+                            const sawLinesEnd = this._constructKofLinesFromSawMethod(rawLines, numberOfMultilineSaw);
+                            sawLinesEnd.forEach(kl => this.addGeometry(kl));
+                            break;
+                        default:
+                            ignoredLines[lineIndex + 1] = line;
+                            errors[lineIndex + 1] = { data: line, message: `Unexpected stop code ${stopCode.code} after ${code}` };
+                            break;
+                    }
+                }
+                case '09_82':
+                case '09_83':
+                case '09_84':
+                case '09_85':
+                case '09_86':
+                case '09_87':
+                case '09_88':
+                case '09_89': {
+                    // Start multiline N - wave method
+                    const numberOfMultilineWave = parseInt(code.split('_')[1], 10) - 80;
+                    stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
+                    const rawLines = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
+                    lineIndex = stopCode.endIndex; // Move index to end of line/polygon
+                    switch (stopCode.code) {
+                        case '09_72':
+                        case '09_73':
+                        case '09_74':
+                        case '09_75':
+                        case '09_76':
+                        case '09_77':
+                        case '09_78':
+                        case '09_79':
+                        case '09_82':
+                        case '09_83':
+                        case '09_84':
+                        case '09_85':
+                        case '09_86':
+                        case '09_87':
+                        case '09_88':
+                        case '09_89':
+                        case '09_91':
+                            // If we hit another multiline start, process current and re-process new start
+                            const waveLines = this._constructKofLinesFromWaveMethod(rawLines, numberOfMultilineWave);
+                            waveLines.forEach(kl => this.addGeometry(kl));
+                            lineIndex--; // This makes sure we re-process the new 09_8x line in the next iteration
+                            break;
+                        case '09_96':
+                            // Close current multiline as polygons
+                            const wavePolygons = this._constructKofLinesFromWaveMethod(rawLines, numberOfMultilineWave);
+                            wavePolygons.forEach(kl => {
+                                const polygon = new KofPolygon_1.KofPolygon(kl.props.points.map(p => `${p.props.northing} ${p.props.easting} ${p.props.elevation}`));
+                                this.addGeometry(polygon);
+                            });
+                            break;
+                        case '09_99':
+                            // End current multiline as lines
+                            const waveLinesEnd = this._constructKofLinesFromWaveMethod(rawLines, numberOfMultilineWave);
+                            waveLinesEnd.forEach(kl => this.addGeometry(kl));
+                            break;
+                        default:
+                            ignoredLines[lineIndex + 1] = line;
+                            errors[lineIndex + 1] = { data: line, message: `Unexpected stop code ${stopCode.code} after ${code}` };
+                            break;
+                    }
+                }
+                case '09_91':
+                    // Start single line / polyline - find line end (09_96 or 09_99)
+                    stopCode = this._getIndexAndCodeOfStopcode(lineIndex + 1);
+                    lineStrings = this._getKofLinesFromIndexToNextStopCode(lineIndex + 1, stopCode.endIndex - 1);
+                    lineIndex = stopCode.endIndex; // Move index to end of line/polygon
+                    switch (stopCode.code) {
+                        case '09_72':
+                        case '09_73':
+                        case '09_74':
+                        case '09_75':
+                        case '09_76':
+                        case '09_77':
+                        case '09_78':
+                        case '09_79':
+                        case '09_82':
+                        case '09_83':
+                        case '09_84':
+                        case '09_85':
+                        case '09_86':
+                        case '09_87':
+                        case '09_88':
+                        case '09_89':
+                        case '09_91':
                             const kofLineStop91 = new KofLine_1.KofLine(lineStrings);
                             this.addGeometry(kofLineStop91);
                             lineIndex--; // This makes sure we re-process the new 09_91 line in the next iteration
@@ -398,15 +536,19 @@ class KOF_V2 {
                             const kofLineStop99 = new KofLine_1.KofLine(lineStrings);
                             this.addGeometry(kofLineStop99);
                             break;
+                        default:
+                            ignoredLines[lineIndex + 1] = line;
+                            errors[lineIndex + 1] = { data: line, message: `Unexpected stop code ${stopCode.code} after 09_91` };
                             break;
-                        // Add more cases as needed for other codes
-                        default: // e.g. "09_96", "09_99" while not creating a line/polygon
-                            this._ignoredLines[lineIndex + 1] = line;
-                            this._errors[lineIndex + 1] = { data: line, errorMessage: `Unexpected standalone code ${code}` };
-                            throw new Error(`[parseLine()] Unexpected standalone code ${code} at line ${lineIndex + 1}`);
                     }
+                // Add more cases as needed for other codes
+                default: // e.g. "09_96", "09_99" while not creating a line/polygon
+                    ignoredLines[lineIndex + 1] = line;
+                    errors[lineIndex + 1] = { data: line, message: `Unexpected standalone code ${code}` };
+                    break;
             }
         }
+        return { geometries, ignoredLines, commentBlocks, errors };
     }
     // Static methods
     static convertKofLinesToArray(filePath) {

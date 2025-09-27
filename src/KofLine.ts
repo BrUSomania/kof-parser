@@ -35,6 +35,30 @@ export class KofLine {
     return new WkbGeomLinestring(pts, meta);
   }
 
+  toGeoJSON(meta?: Record<string, any>) {
+    if (this.props.points.length === 0) return null;
+    const coords = this.props.points.map(p => (p.props.elevation !== undefined && p.props.elevation !== null)
+      ? [p.props.easting, p.props.northing, p.props.elevation]
+      : [p.props.easting, p.props.northing]
+    );
+    const properties = { name: this.props.name, code: this.props.code, ...meta };
+    return {
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: coords as any },
+      properties,
+    };
+  }
+
+  static toWkbFromParsedRows(rows: any[], meta?: Record<string, any>) {
+    const line = KofLine.fromParsedRows(rows);
+    return line.toWkbLinestring(meta);
+  }
+
+  static toGeoJSONFromParsedRows(rows: any[], meta?: Record<string, any>) {
+    const line = KofLine.fromParsedRows(rows);
+    return line.toGeoJSON(meta);
+  }
+
   static fromParsedRows(rows: any[], headerFormat: string|null = null) {
     const lines = rows.map(r => (r.raw ? r.raw : `05 ${r.name||''} ${r.code||''} ${r.northing||''} ${r.easting||''} ${r.elevation||''}`));
     return new KofLine(lines, headerFormat);

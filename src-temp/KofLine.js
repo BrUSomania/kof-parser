@@ -28,6 +28,27 @@ class KofLine {
         const pts = this.props.points.map(p => new geometry_1.WkbGeomPoint(p.props.easting, p.props.northing, p.props.elevation, { name: p.props.name, code: p.props.code }));
         return new geometry_1.WkbGeomLinestring(pts, meta);
     }
+    toGeoJSON(meta) {
+        if (this.props.points.length === 0)
+            return null;
+        const coords = this.props.points.map(p => (p.props.elevation !== undefined && p.props.elevation !== null)
+            ? [p.props.easting, p.props.northing, p.props.elevation]
+            : [p.props.easting, p.props.northing]);
+        const properties = { name: this.props.name, code: this.props.code, ...meta };
+        return {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords },
+            properties,
+        };
+    }
+    static toWkbFromParsedRows(rows, meta) {
+        const line = KofLine.fromParsedRows(rows);
+        return line.toWkbLinestring(meta);
+    }
+    static toGeoJSONFromParsedRows(rows, meta) {
+        const line = KofLine.fromParsedRows(rows);
+        return line.toGeoJSON(meta);
+    }
     static fromParsedRows(rows, headerFormat = null) {
         const lines = rows.map(r => (r.raw ? r.raw : `05 ${r.name || ''} ${r.code || ''} ${r.northing || ''} ${r.easting || ''} ${r.elevation || ''}`));
         return new KofLine(lines, headerFormat);

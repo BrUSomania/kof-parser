@@ -111,6 +111,17 @@ class KofPoint {
     toWkbPoint(meta) {
         return new geometry_1.WkbGeomPoint(this.props.easting, this.props.northing, this.props.elevation, { name: this.props.name, code: this.props.code, ...meta });
     }
+    toGeoJSON(meta) {
+        const properties = { name: this.props.name, code: this.props.code, ...meta };
+        const coords = (this.props.elevation !== undefined && this.props.elevation !== null)
+            ? [this.props.easting, this.props.northing, this.props.elevation]
+            : [this.props.easting, this.props.northing];
+        return {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: coords },
+            properties,
+        };
+    }
     // Create a KofPoint from a parsed object. Example:
     // const p = KofPoint.fromParsed({ name: 'Point1', northing: 1000, easting: 2000, elevation: 50 });
     // const p_min = KofPoint.fromParsed({ northing: 1000, easting: 2000 });  // the minimal valid point
@@ -121,6 +132,24 @@ class KofPoint {
             throw new TypeError('KofPoint.fromParsed requires at least northing and easting as numbers');
         }
         return new KofPoint(parsed.raw || `05 ${parsed.name || ''} ${parsed.code || ''} ${parsed.northing || ''} ${parsed.easting || ''} ${parsed.elevation || ''}`);
+    }
+    static toWkbFromParsed(parsed, meta) {
+        if (typeof parsed !== 'object' || parsed === null)
+            throw new TypeError('KofPoint.toWkbFromParsed expects an object');
+        if (typeof parsed.northing !== 'number' || typeof parsed.easting !== 'number')
+            throw new TypeError('KofPoint.toWkbFromParsed requires northing and easting');
+        return new geometry_1.WkbGeomPoint(parsed.easting, parsed.northing, parsed.elevation, { name: parsed.name, code: parsed.code, ...meta });
+    }
+    static toGeoJSONFromParsed(parsed, meta) {
+        if (typeof parsed !== 'object' || parsed === null)
+            throw new TypeError('KofPoint.toGeoJSONFromParsed expects an object');
+        if (typeof parsed.northing !== 'number' || typeof parsed.easting !== 'number')
+            throw new TypeError('KofPoint.toGeoJSONFromParsed requires northing and easting');
+        const properties = { name: parsed.name, code: parsed.code, ...meta };
+        const coords = (parsed.elevation !== undefined && parsed.elevation !== null)
+            ? [parsed.easting, parsed.northing, parsed.elevation]
+            : [parsed.easting, parsed.northing];
+        return { type: 'Feature', geometry: { type: 'Point', coordinates: coords }, properties };
     }
 }
 exports.KofPoint = KofPoint;

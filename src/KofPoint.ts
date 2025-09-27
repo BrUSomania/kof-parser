@@ -122,6 +122,18 @@ export class KofPoint {
     return new WkbGeomPoint(this.props.easting, this.props.northing, this.props.elevation, { name: this.props.name, code: this.props.code, ...meta });
   }
 
+  toGeoJSON(meta?: Record<string, any>) {
+    const properties = { name: this.props.name, code: this.props.code, ...meta };
+    const coords = (this.props.elevation !== undefined && this.props.elevation !== null)
+      ? [this.props.easting, this.props.northing, this.props.elevation]
+      : [this.props.easting, this.props.northing];
+    return {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: coords },
+      properties,
+    };
+  }
+
   // Create a KofPoint from a parsed object. Example:
   // const p = KofPoint.fromParsed({ name: 'Point1', northing: 1000, easting: 2000, elevation: 50 });
   // const p_min = KofPoint.fromParsed({ northing: 1000, easting: 2000 });  // the minimal valid point
@@ -133,5 +145,21 @@ export class KofPoint {
     return new KofPoint(
       parsed.raw || `05 ${parsed.name||''} ${parsed.code||''} ${parsed.northing||''} ${parsed.easting||''} ${parsed.elevation||''}`
     );
+  }
+
+  static toWkbFromParsed(parsed: Partial<KofPointProps>, meta?: Record<string, any>) {
+    if (typeof parsed !== 'object' || parsed === null) throw new TypeError('KofPoint.toWkbFromParsed expects an object');
+    if (typeof parsed.northing !== 'number' || typeof parsed.easting !== 'number') throw new TypeError('KofPoint.toWkbFromParsed requires northing and easting');
+    return new WkbGeomPoint(parsed.easting as number, parsed.northing as number, parsed.elevation as any, { name: parsed.name, code: parsed.code, ...meta });
+  }
+
+  static toGeoJSONFromParsed(parsed: Partial<KofPointProps>, meta?: Record<string, any>) {
+    if (typeof parsed !== 'object' || parsed === null) throw new TypeError('KofPoint.toGeoJSONFromParsed expects an object');
+    if (typeof parsed.northing !== 'number' || typeof parsed.easting !== 'number') throw new TypeError('KofPoint.toGeoJSONFromParsed requires northing and easting');
+    const properties = { name: parsed.name, code: parsed.code, ...meta };
+    const coords = (parsed.elevation !== undefined && parsed.elevation !== null)
+      ? [parsed.easting, parsed.northing, parsed.elevation]
+      : [parsed.easting, parsed.northing];
+    return { type: 'Feature', geometry: { type: 'Point', coordinates: coords }, properties };
   }
 }

@@ -22,6 +22,11 @@ test/geojson/
 
 # Test output
 coverage/
+src/test_output/
+src-temp/
+test_output/
+test_output/**
+src/test_output/**
 
 # Environment files
 .env

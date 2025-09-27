@@ -44,6 +44,35 @@ export class KofPolygon extends KofLine {
     return new WkbGeomPolygon(pts, meta);
   }
 
+  toGeoJSON(meta?: Record<string, any>) {
+    if (this.propsAsPolygon.points.length === 0) return null;
+    // GeoJSON polygon uses an array of linear rings; ensure first ring is closed
+    const coords = this.propsAsPolygon.points.map(p => (p.props.elevation !== undefined && p.props.elevation !== null)
+      ? [p.props.easting, p.props.northing, p.props.elevation]
+      : [p.props.easting, p.props.northing]
+    );
+    // Close ring if necessary
+    const first = coords[0];
+    const last = coords[coords.length - 1];
+    if (first && last && (first[0] !== last[0] || first[1] !== last[1])) coords.push(first.slice());
+    const properties = { name: this.propsAsPolygon.name, code: this.propsAsPolygon.code, ...meta };
+    return {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [coords] as any },
+      properties,
+    };
+  }
+
+  static toWkbFromParsedRows(rows: any[], meta?: Record<string, any>) {
+    const poly = KofPolygon.fromParsedRows(rows);
+    return poly.toWkbPolygon(meta);
+  }
+
+  static toGeoJSONFromParsedRows(rows: any[], meta?: Record<string, any>) {
+    const poly = KofPolygon.fromParsedRows(rows);
+    return poly.toGeoJSON(meta);
+  }
+
   static fromParsedRows(rows: any[], headerFormat: string|null = null) {
     const lines = rows.map(r => (r.raw ? r.raw : `05 ${r.name||''} ${r.code||''} ${r.northing||''} ${r.easting||''} ${r.elevation||''}`));
     return new KofPolygon(lines, headerFormat);

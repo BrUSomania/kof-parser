@@ -149,7 +149,8 @@ export class KOF_V2 {
         this._kofType = null;
         this._sourceEpsg = null;
         this._targetEpsg = null;
-        this._metadata = {
+    this._fileGeometries = [];
+    this._metadata = {
             fileName: path.basename(filePath),
             fileExtension: path.extname(filePath),
             fileSize: fs.statSync(filePath).size,
@@ -245,13 +246,47 @@ export class KOF_V2 {
     }
 
     convertToWkbGeometries(): any[] {
-        // Placeholder: actual conversion logic to WKB geometries would go here
-        return [];
+        const out: any[] = [];
+        for (const g of this._fileGeometries) {
+            if (!g) continue;
+            const t = g.constructor.name;
+            try {
+                if (t === 'KofPoint' && typeof (g as KofPoint).toWkbPoint === 'function') {
+                    out.push((g as KofPoint).toWkbPoint());
+                } else if (t === 'KofLine' && typeof (g as KofLine).toWkbLinestring === 'function') {
+                    const w = (g as KofLine).toWkbLinestring();
+                    if (w) out.push(w);
+                } else if (t === 'KofPolygon' && typeof (g as KofPolygon).toWkbPolygon === 'function') {
+                    const w = (g as KofPolygon).toWkbPolygon();
+                    if (w) out.push(w);
+                }
+            } catch (e) {
+                // skip problematic geometry but continue
+            }
+        }
+        return out;
     }
 
     convertToGeoJson(): any {
-        // Placeholder: actual conversion logic to GeoJSON would go here
-        return {};
+        const features: any[] = [];
+        for (const g of this._fileGeometries) {
+            if (!g) continue;
+            const t = g.constructor.name;
+            try {
+                if (t === 'KofPoint' && typeof (g as KofPoint).toGeoJSON === 'function') {
+                    features.push((g as KofPoint).toGeoJSON());
+                } else if (t === 'KofLine' && typeof (g as KofLine).toGeoJSON === 'function') {
+                    const f = (g as KofLine).toGeoJSON();
+                    if (f) features.push(f);
+                } else if (t === 'KofPolygon' && typeof (g as KofPolygon).toGeoJSON === 'function') {
+                    const f = (g as KofPolygon).toGeoJSON();
+                    if (f) features.push(f);
+                }
+            } catch (e) {
+                // continue
+            }
+        }
+        return { type: 'FeatureCollection', features };
     }
 
     addGeometry(geometry: KofPoint | KofLine | KofPolygon): void {
@@ -348,7 +383,11 @@ export class KOF_V2 {
             throw new Error("Invalid or empty file content");
         }
 
-        const geometries: (KofPoint | KofLine | KofPolygon)[] = [];
+    // Ensure instance geometry storage is used so metadata and geometry
+    // arrays remain in sync. We reset the instance storage here and use
+    // this.addGeometry(...) for every geometry created.
+    this._fileGeometries = [];
+    const geometries: (KofPoint | KofLine | KofPolygon)[] = this._fileGeometries;
         const ignoredLines: { [lineNumber: number]: string } = {};
         const commentBlocks: KofInfoRecord = {};
         const errors: KofInfoRecord = {};
@@ -373,7 +412,7 @@ export class KOF_V2 {
                     break;
                 case '05':  // Point record (could be part of line or polygon)
                     const kofPoint = this._parseKofPoint(line);
-                    if (kofPoint) geometries.push(kofPoint);
+                    if (kofPoint) this.addGeometry(kofPoint);
                     break;
                 case '09_72': case '09_73': case '09_74': case '09_75': case '09_76': case '09_77': case '09_78': case '09_79': {
                     // Start multiline N - saw method
@@ -387,7 +426,7 @@ export class KOF_V2 {
                         case '09_91':
                             // If we hit another multiline start, process current and re-process new start
                             const sawLines = this._constructKofLinesFromSawMethod(rawLines, numberOfMultilineSaw);
-                            sawLines.forEach(kl => geometries.push(kl));
+                            sawLines.forEach(kl => this.addGeometry(kl));
                             lineIndex--; // This makes sure we re-process the new 09_7x line in the next iteration
                             break;
                         case '09_96':
@@ -395,13 +434,13 @@ export class KOF_V2 {
                             const sawPolygons = this._constructKofLinesFromSawMethod(rawLines, numberOfMultilineSaw);
                             sawPolygons.forEach(kl => {
                                 const polygon = new KofPolygon(kl.props.points.map(p => `${p.props.northing} ${p.props.easting} ${p.props.elevation}`));
-                                geometries.push(polygon);
+                                this.addGeometry(polygon);
                             });
                             break;
                         case '09_99':
                             // End current multiline as lines
                             const sawLinesEnd = this._constructKofLinesFromSawMethod(rawLines, numberOfMultilineSaw);
-                            sawLinesEnd.forEach(kl => geometries.push(kl));
+                            sawLinesEnd.forEach(kl => this.addGeometry(kl));
                             break;
                         default:
                             ignoredLines[lineIndex + 1] = line;
@@ -420,8 +459,8 @@ export class KOF_V2 {
                         case '09_82': case '09_83': case '09_84': case '09_85': case '09_86': case '09_87': case '09_88': case '09_89':
                         case '09_91':
                             // If we hit another multiline start, process current and re-process new start
-                            const waveLines = this._constructKofLinesFromWaveMethod(rawLines, numberOfMultilineWave);
-                            waveLines.forEach(kl => geometries.push(kl));
+                        const waveLines = this._constructKofLinesFromWaveMethod(rawLines, numberOfMultilineWave);
+                        waveLines.forEach(kl => this.addGeometry(kl));
                             lineIndex--; // This makes sure we re-process the new 09_8x line in the next iteration
                             break;
                         case '09_96':
@@ -429,13 +468,13 @@ export class KOF_V2 {
                             const wavePolygons = this._constructKofLinesFromWaveMethod(rawLines, numberOfMultilineWave);
                             wavePolygons.forEach(kl => {
                                 const polygon = new KofPolygon(kl.props.points.map(p => `${p.props.northing} ${p.props.easting} ${p.props.elevation}`));
-                                geometries.push(polygon);
+                                this.addGeometry(polygon);
                             });
                             break;
                         case '09_99':
                             // End current multiline as lines
                             const waveLinesEnd = this._constructKofLinesFromWaveMethod(rawLines, numberOfMultilineWave);
-                            waveLinesEnd.forEach(kl => geometries.push(kl));
+                            waveLinesEnd.forEach(kl => this.addGeometry(kl));
                             break;
                         default:
                             ignoredLines[lineIndex + 1] = line;
