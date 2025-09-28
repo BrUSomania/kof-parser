@@ -181,8 +181,8 @@ export class KOF_V2 {
     static read(input: string | string[], validateExtensionIsKof: boolean = true, recursive: boolean = false): KOF_V2[] {
         let isInputDirectory = false;
         try {
-            const stats = fs.statSync(input as string);
-            isInputDirectory = stats.isDirectory();
+            const stats = fs.statSync(input as string) as unknown as fs.Stats;
+            isInputDirectory = (stats as any).isDirectory();
         } catch (error) {
             isInputDirectory = false;
         }
