@@ -109,6 +109,15 @@ console.log(geojson);
 - Reprojection: `proj4` is used during testing to convert demo files containing `epsg25832` or `epsg5110` in their filenames to EPSG:4326; the converted files are written with `epsg4326` in their filenames.
 - EPSG:5110: the repo registers a reasonable NTM10-like proj4 definition as a best-effort. Replace this definition with an authoritative proj4 string if you have one.
 
+## Build / CI note
+
+To ensure clean, reproducible builds and to avoid TypeScript write-errors when a `dist/` folder is present in a working tree, the project now performs an explicit clean before building:
+
+- Locally: run `npm run clean` (this removes the `dist/` directory) or `npm run build` which will run the clean step automatically.
+- CI: the GitHub Actions workflow runs a `git clean -fdx` step before building so the runner has a fresh workspace and `tsc` can write output into `dist/` without conflicts.
+
+This keeps local and CI builds consistent and prevents "TS5055: Cannot write file ... because it would overwrite input file" errors when `dist/` is present in the repo.
+
 ## License
 
 This project is released under the MIT License; see the `LICENSE` file in the repository for full terms.

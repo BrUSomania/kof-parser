@@ -17,8 +17,9 @@
     "types"
   ],
   "scripts": {
-  "build": "tsc && rollup -c",
-  "test": "node test/cleanup_logs.js && mocha --exit --recursive --file test/mocha/setup.js test/mocha",
+  "clean": "node ./scripts/clean_dist.js",
+  "build": "npm run clean && tsc && rollup -c",
+  "test": "node test/cleanup_logs.js && mocha --exit --recursive --file src/test/mocha/setup.js src/test/mocha",
     "demo": "node demo/demo.js"
   },
   "keywords": [

@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Ensure clean workspace
+        run: git clean -fdx || true
+
       - name: Build
         run: npm run build --if-present
 
