@@ -23,14 +23,17 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install dependencies (including dev)
         run: npm ci
 
       - name: Ensure clean workspace
         run: git clean -fdx || true
 
-      - name: Build
-        run: npm run build --if-present
+      - name: Show Node / npm / tsc versions
+        run: node -v; npm -v; npx tsc -v || true
 
-      - name: Run tests
+      - name: Build (clean + tsc + rollup)
+        run: npm run build
+
+      - name: Run tests (after build)
         run: npm test
