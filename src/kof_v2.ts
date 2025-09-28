@@ -608,7 +608,7 @@ export class KOF_V2 {
         const kofFiles: KOF_V2[] = [];
         const walk = (dir: string) => {
             const items = fs.readdirSync(dir, { withFileTypes: true });
-            items.forEach(item => {
+            items.forEach((item: fs.Dirent) => {
                 if (item.isDirectory() && recursive) {
                     walk(path.join(dir, item.name));
                 } else if (item.isFile() && item.name.endsWith('.kof')) {
