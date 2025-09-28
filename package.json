@@ -17,9 +17,9 @@
     "types"
   ],
   "scripts": {
-  "clean": "node ./scripts/clean_dist.js",
-  "tsc:clean": "npm run clean && tsc --project ./tsconfig.json",
-  "build": "npm run clean && tsc && rollup -c",
+    "clean": "node ./scripts/clean_dist.js",
+    "tsc:clean": "npm run clean && tsc --project ./tsconfig.json",
+    "build": "npm run clean && tsc && rollup -c",
     "test": "node test/cleanup_logs.js && mocha --exit --recursive --file src/test/mocha/setup.js src/test/mocha",
     "demo": "node demo/demo.js"
   },
@@ -46,7 +46,7 @@
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-typescript": "^12.1.4",
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.17",
     "iconv-lite": "^0.7.0",
     "mocha": "^10.2.0",
     "pdf-parse": "^1.1.1",
