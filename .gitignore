@@ -21,6 +21,7 @@ test/geojson/
 *.code-workspace
 
 # Test output
+*tmp/
 coverage/
 src/test_output/
 src-temp/
