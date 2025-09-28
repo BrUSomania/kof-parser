@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { KOF, WkbGeomPoint, WkbGeomLinestring } = require('../../dist/kof-parser.cjs.js');
+const { KOF, WkbGeomPoint, WkbGeomLinestring } = require('../../../test/helpers/kof-loader');
 const { writeKofLog } = require('./log_helper');
 
 describe.skip('advanced attributes and malformed rows (legacy - skipped)', function() {
