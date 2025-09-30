@@ -63,4 +63,13 @@ export class KofLine {
     const lines = rows.map(r => (r.raw ? r.raw : `05 ${r.name||''} ${r.code||''} ${r.northing||''} ${r.easting||''} ${r.elevation||''}`));
     return new KofLine(lines, headerFormat);
   }
+
+  /** Reproject all points in this line in-place from sourceEpsg -> targetEpsg */
+  reproject(sourceEpsg: string | number | null, targetEpsg: string | number | null): void {
+    if (!this.props || !Array.isArray(this.props.points)) return;
+    for (const p of this.props.points) {
+      // Each KofPoint implements reproject
+      (p as any).reproject(sourceEpsg as any, targetEpsg as any);
+    }
+  }
 }

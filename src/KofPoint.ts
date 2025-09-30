@@ -134,6 +134,27 @@ export class KofPoint {
     };
   }
 
+  /**
+   * Reproject this point in-place from sourceEpsg to targetEpsg using proj4.
+   * Accepts EPSG strings like 'EPSG:25832' or numeric codes as strings/numbers.
+   */
+  reproject(sourceEpsg: string | number | null, targetEpsg: string | number | null): void {
+    // Lazy load proj4 so consumers without it don't get a hard dependency
+    let proj4: any;
+    try { proj4 = require('proj4'); } catch (e) { proj4 = null; }
+    if (!proj4) throw new Error('proj4 is required for reprojection but could not be loaded');
+    if (!sourceEpsg || !targetEpsg) throw new Error('Both source and target EPSG codes must be provided');
+    const src = String(sourceEpsg);
+    const tgt = String(targetEpsg);
+    if (src.toLowerCase() === tgt.toLowerCase()) return; // nothing to do
+    const inCoord = [this.props.easting, this.props.northing];
+    const out = proj4(src, tgt, inCoord);
+    if (!Array.isArray(out) || out.length < 2) throw new Error('proj4 returned invalid coordinate');
+    this.props.easting = Number(out[0]);
+    this.props.northing = Number(out[1]);
+    if (out.length >= 3 && out[2] !== undefined && out[2] !== null) this.props.elevation = Number(out[2]);
+  }
+
   // Create a KofPoint from a parsed object. Example:
   // const p = KofPoint.fromParsed({ name: 'Point1', northing: 1000, easting: 2000, elevation: 50 });
   // const p_min = KofPoint.fromParsed({ northing: 1000, easting: 2000 });  // the minimal valid point

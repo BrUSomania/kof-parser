@@ -125,6 +125,7 @@ export class KOF_V2 {
     _errors: KofInfoRecord = {};
     // Ignored lines should be an object where line numbers map to the actual line content
     _ignoredLines: { [lineNumber: number]: string };
+    _originalGeometries: Array<KofPoint | KofLine | KofPolygon>; // Placeholder for original geometries before reprojection
     _fileGeometries: Array<KofPoint | KofLine | KofPolygon>; // Placeholder for parsed geometries
     _kofType: "coordinates" | "measurements" | null = null;
     _sourceEpsg: EpsgCode = null; // Default to UTM32 / ETRS89
@@ -149,8 +150,9 @@ export class KOF_V2 {
         this._kofType = null;
         this._sourceEpsg = null;
         this._targetEpsg = null;
-    this._fileGeometries = [];
-    this._metadata = {
+        this._originalGeometries = [];
+        this._fileGeometries = [];
+        this._metadata = {
             fileName: path.basename(filePath),
             fileExtension: path.extname(filePath),
             fileSize: fs.statSync(filePath).size,
@@ -172,6 +174,7 @@ export class KOF_V2 {
         // Parse the file content to populate geometries and metadata
         const parsedContent = this.parseContentToGeometries(this._fileContent);
         this._fileGeometries = parsedContent.geometries;
+        this._originalGeometries = parsedContent.geometries.slice(); // shallow copy
         this._ignoredLines = parsedContent.ignoredLines;
         this._commentBlocks = parsedContent.commentBlocks;
         this._errors = parsedContent.errors;
@@ -208,7 +211,7 @@ export class KOF_V2 {
     getSosiCodes(): Set<string> { return KOF_V2.getSosiCodesSet(this._fileContent); }
 
     // Class instance methods
-    _isEpsgValid(epsg: EpsgCode, isSource: boolean = true): boolean {
+    _isEpsgValid(epsg: EpsgCode): boolean {
         if (!epsg) return false;
         const epsgStr = String(epsg);
         // Accept either 'EPSG:1234' or plain numeric '1234'
@@ -243,6 +246,58 @@ export class KOF_V2 {
         this._targetEpsgDescription = this._targetEpsg && (epsgDefs as any)[this._targetEpsg] ? (epsgDefs as any)[this._targetEpsg] : null;
     }
 
+    reproject(sourceEpsg?: EpsgCode, targetEpsg?: EpsgCode): (KofPoint | KofLine | KofPolygon)[] {
+        // Validate EPSG codes if provided
+        if (!this._isEpsgValid(sourceEpsg as EpsgCode)) throw new Error(`Invalid source EPSG code: ${sourceEpsg}`);
+        if (!this._isEpsgValid(targetEpsg as EpsgCode)) throw new Error(`Invalid target EPSG code: ${targetEpsg}`);  
+        // If either source or target EPSG is not provided, use existing values
+        const srcEpsg = sourceEpsg || this._sourceEpsg;
+        const tgtEpsg = targetEpsg || this._targetEpsg;
+        if (!srcEpsg || !tgtEpsg) throw new Error(`Both source and target EPSG codes must be provided or already set.\n Current source: ${srcEpsg}, target: ${tgtEpsg}`);
+        if (srcEpsg === tgtEpsg) { return this._fileGeometries; } // No reprojection needed if same
+        // Ensure proj4 is available and register EPSG defs (lazy, idempotent)
+        let proj4: any = null;
+        try { proj4 = require('proj4'); } catch (e) { proj4 = null; }
+        if (!proj4) throw new Error('proj4 is required for reprojection but could not be loaded');
+        try {
+            // Register all known definitions from epsgDefs. Keys may be "EPSG:25832" or plain numeric strings.
+            for (const k of Object.keys(epsgDefs as any)) {
+                try {
+                    // Avoid re-registering identical defs repeatedly; proj4.defs will overwrite but that's okay.
+                    proj4.defs(k, (epsgDefs as any)[k]);
+                } catch (e) {
+                    // ignore individual registration errors and continue
+                }
+            }
+        } catch (e) {
+            // ignore registration failures and proceed — individual geometry reprojection may still fail with clearer error
+        }
+
+        // Reproject each geometry  
+        for (const geom of this._fileGeometries) {
+            const geomType = geom.constructor.name; 
+            // Perform reprojection based on geometry type
+            switch (geomType) { 
+                case 'KofPoint':
+                    (geom as KofPoint).reproject(srcEpsg, tgtEpsg);
+                    break;
+                case 'KofLine':
+                    (geom as KofLine).reproject(srcEpsg, tgtEpsg);
+                    break;
+                case 'KofPolygon':
+                    (geom as KofPolygon).reproject(srcEpsg, tgtEpsg);
+                    break;
+            }
+        }
+        // Update source and target EPSG codes and descriptions
+        this._sourceEpsg = srcEpsg;
+        this._targetEpsg = tgtEpsg;
+        this._sourceEpsgDescription = this._sourceEpsg && (epsgDefs as any)[this._sourceEpsg] ? (epsgDefs as any)[this._sourceEpsg] : null;
+        this._targetEpsgDescription = this._targetEpsg && (epsgDefs as any)[this._targetEpsg] ? (epsgDefs as any)[this._targetEpsg] : null;
+
+        return this._fileGeometries;
+    }
+
     printFileVersion(): string {
         return `KOF_V2 Version: ${this._fileVersion}`;
     }
@@ -253,11 +308,6 @@ export class KOF_V2 {
 
     printMetadata(): Record<string, any> {
         return this._metadata;
-    }
-
-    reproject(sourceEpsg: string, targetEpsg: string): void {
-        // Placeholder: actual reprojection logic would go here
-        console.log(`Reprojecting from ${sourceEpsg} to ${targetEpsg} - not yet implemented`);
     }
 
     convertToWkbGeometries(): any[] {

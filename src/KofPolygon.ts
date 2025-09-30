@@ -77,4 +77,10 @@ export class KofPolygon extends KofLine {
     const lines = rows.map(r => (r.raw ? r.raw : `05 ${r.name||''} ${r.code||''} ${r.northing||''} ${r.easting||''} ${r.elevation||''}`));
     return new KofPolygon(lines, headerFormat);
   }
+
+  /** Reproject polygon points in-place. Delegates to KofLine.reproject for each point. */
+  reproject(sourceEpsg: string | number | null, targetEpsg: string | number | null): void {
+    // KofPolygon reuses KofLine point storage; call parent behaviour
+    super.reproject(sourceEpsg as any, targetEpsg as any);
+  }
 }
