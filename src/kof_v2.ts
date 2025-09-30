@@ -532,6 +532,63 @@ export class KOF_V2 {
         return fileContent.split(/\r?\n/);
     }
 
+    /**
+     * Parse raw KOF content (string or string[] of lines) into a KOF_V2 instance.
+     * - raw: full ASCII KOF file contents as a single string, or an array of lines.
+     * - fileName: optional name to use for metadata (e.g. when parsing from memory)
+     */
+    static parse(raw: string | string[], fileName?: string): KOF_V2 {
+        const lines: string[] = Array.isArray(raw) ? raw : ('' + raw).split(/\r?\n/);
+        return KOF_V2._createFromLines(lines, fileName);
+    }
+
+    // Internal: construct a KOF_V2 instance from already-read lines (bypasses file IO)
+    private static _createFromLines(lines: string[], fileName?: string): KOF_V2 {
+        // Create an object with the KOF_V2 prototype and populate the expected fields
+        const inst = Object.create(KOF_V2.prototype) as KOF_V2;
+        inst._filePath = fileName || '<memory>';
+        inst._fileVersion = '1.0.0';
+        inst._header = '-05 PPPPPPPPPP KKKKKKKK XXXXXXXX.XXX YYYYYYY.YYY ZZZZ.ZZZ';
+        inst._fileContent = lines.slice();
+        inst._kofType = null;
+        inst._sourceEpsg = null;
+        inst._targetEpsg = null;
+        inst._fileGeometries = [];
+        inst._commentBlocks = {};
+        inst._adminBlocks = {};
+        inst._errors = {};
+        inst._ignoredLines = {} as { [lineNumber: number]: string };
+
+        const fileSize = lines.join('\n').length;
+        inst._metadata = {
+            fileName: fileName ? path.basename(fileName) : '<memory>',
+            fileExtension: fileName ? path.extname(fileName) : '',
+            fileSize,
+            fileSizeUnit: 'bytes',
+            fileType: 'KOF',
+            sosiCodes: KOF_V2.getSosiCodesSet(inst._fileContent),
+            numberOfFileLines: inst._fileContent.length,
+            numberOfSosiCodes: KOF_V2.getSosiCodesSet(inst._fileContent).size,
+            geomCounts: {
+                points: 0,
+                lineStrings: 0,
+                linePoints: 0,
+                polygons: 0,
+                polygonPoints: 0,
+            },
+            kofCodeCounts: Object.fromEntries(Array.from(kofCodes.keys()).map(k => [k, 0])),
+        };
+
+        // Parse the file content to populate geometries and metadata
+        const parsedContent = KOF_V2.prototype.parseContentToGeometries.call(inst, inst._fileContent);
+        inst._fileGeometries = parsedContent.geometries;
+        inst._ignoredLines = parsedContent.ignoredLines;
+        inst._commentBlocks = parsedContent.commentBlocks;
+        inst._errors = parsedContent.errors;
+
+        return inst;
+    }
+
     static validateKofContent(fileContent: string[]): void {
         // Pass for now
     }
@@ -592,14 +649,16 @@ export class KOF_V2 {
 
     static _readSingleFile(filePath: string, validateExtensionIsKof: boolean = true): KOF_V2 {
     if (validateExtensionIsKof && !KOF_V2.validateKofExtension(filePath)) throw new Error("Invalid file extension");
-    return new KOF_V2(filePath, KOF_V2._ctorKey);
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return KOF_V2.parse(raw, filePath);
     }
 
     static _readMultipleFiles(filePaths: string[], validateExtensionIsKof: boolean = true): KOF_V2[] {
         const kofFiles: KOF_V2[] = [];
         filePaths.forEach(fp => {
             if (validateExtensionIsKof && !KOF_V2.validateKofExtension(fp)) throw new Error("Invalid file extension");
-            kofFiles.push(new KOF_V2(fp, KOF_V2._ctorKey));
+            const raw = fs.readFileSync(fp, 'utf8');
+            kofFiles.push(KOF_V2.parse(raw, fp));
         });
         return kofFiles;
     }
@@ -612,7 +671,9 @@ export class KOF_V2 {
                 if (item.isDirectory() && recursive) {
                     walk(path.join(dir, item.name));
                 } else if (item.isFile() && item.name.endsWith('.kof')) {
-                    kofFiles.push(new KOF_V2(path.join(dir, item.name), KOF_V2._ctorKey));
+                    const fp = path.join(dir, item.name);
+                    const raw = fs.readFileSync(fp, 'utf8');
+                    kofFiles.push(KOF_V2.parse(raw, fp));
                 }
             });
         };
