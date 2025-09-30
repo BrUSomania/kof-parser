@@ -1,7 +1,7 @@
 const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
-const { KOF_V2 } = require('../../../src-temp/kof_v2');
+const { KOF_V2 } = require('../../../src/kof_v2');
 
 describe('KOF_V2 read two files at once', function() {
   it('accepts an array of two file paths and returns two KOF_V2 instances', function() {

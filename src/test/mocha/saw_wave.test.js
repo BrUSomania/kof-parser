@@ -1,7 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { KOF_V2 } = require('../../../src-temp/kof_v2');
+const { KOF_V2 } = require('../../../src/kof_v2');
 
 describe('Multi-line saw codes - KOF_V2 saw constructor', function() {
   it('distributes saw (09_72_epsg25832.kof) across 2 lines (per group)', function() {

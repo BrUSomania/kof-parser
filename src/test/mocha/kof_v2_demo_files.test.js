@@ -1,7 +1,7 @@
 const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
-const { KOF_V2 } = require('../../../src-temp/kof_v2');
+const { KOF_V2 } = require('../../../src/kof_v2');
 const { writeKofLog } = require('./log_helper');
 
 describe('KOF_V2 demo files smoke test', function() {

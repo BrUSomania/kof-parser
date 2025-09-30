@@ -263,8 +263,21 @@ export class KOF_V2 {
             // Register all known definitions from epsgDefs. Keys may be "EPSG:25832" or plain numeric strings.
             for (const k of Object.keys(epsgDefs as any)) {
                 try {
-                    // Avoid re-registering identical defs repeatedly; proj4.defs will overwrite but that's okay.
-                    proj4.defs(k, (epsgDefs as any)[k]);
+                    const def = (epsgDefs as any)[k];
+                    // epsg_list.json uses arrays like ["EPSG:25832", "+proj=utm ..."].
+                    // proj4.defs expects the proj4 string, not the array. Pick the string when present.
+                    const defStr = Array.isArray(def) ? (def[1] || def[0]) : def;
+                    if (typeof defStr === 'string' && defStr.trim().length > 0) {
+                        proj4.defs(k, defStr);
+                    }
+                    const keyUpper = String(k).toUpperCase();
+                    if (!keyUpper.startsWith('EPSG:')) {
+                        const pref = `EPSG:${k}`;
+                        try { proj4.defs(pref, def); } catch (e) { /* ignore */ }
+                    } else {
+                        const noPref = keyUpper.replace(/^EPSG:/i, '');
+                        try { proj4.defs(noPref, def); } catch (e) { /* ignore */ }
+                    }
                 } catch (e) {
                     // ignore individual registration errors and continue
                 }
@@ -279,13 +292,13 @@ export class KOF_V2 {
             // Perform reprojection based on geometry type
             switch (geomType) { 
                 case 'KofPoint':
-                    (geom as KofPoint).reproject(srcEpsg, tgtEpsg);
+                    try { (geom as KofPoint).reproject(srcEpsg, tgtEpsg); } catch (err) { throw (err instanceof Error) ? err : new Error(String(err)); }
                     break;
                 case 'KofLine':
-                    (geom as KofLine).reproject(srcEpsg, tgtEpsg);
+                    try { (geom as KofLine).reproject(srcEpsg, tgtEpsg); } catch (err) { throw (err instanceof Error) ? err : new Error(String(err)); }
                     break;
                 case 'KofPolygon':
-                    (geom as KofPolygon).reproject(srcEpsg, tgtEpsg);
+                    try { (geom as KofPolygon).reproject(srcEpsg, tgtEpsg); } catch (err) { throw (err instanceof Error) ? err : new Error(String(err)); }
                     break;
             }
         }

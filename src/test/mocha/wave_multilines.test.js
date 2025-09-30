@@ -1,7 +1,7 @@
 const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
-const { KOF_V2 } = require('../../../src-temp/kof_v2');
+const { KOF_V2 } = require('../../../src/kof_v2');
 
 describe('Bølge multilines (82..89) - KOF_V2 wave constructor', function () {
   const demoDir = path.join(__dirname, '..', '..', 'demo', 'kof_files', '82-89_bolge');
